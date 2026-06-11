@@ -1,0 +1,23 @@
+{
+	"locked": false,
+	"team": {
+		"groups": [
+			{ "id": "fe", "name": "Frontend", "emoji": "🎨" },
+			{ "id": "be", "name": "Backend", "emoji": "🛠️" }
+		],
+		"members": [
+			{ "id": "nicola", "name": "Nicola", "groupId": "fe", "googleEmail": "nicola@yourorg.com" }
+		]
+	},
+	"board": { "workdays": [1, 2, 3, 4, 5], "showWeekends": false },
+	"jira": {
+		"baseUrl": "https://yourorg.atlassian.net",
+		"email": "you@yourorg.com",
+		"token": "…",
+		"useStoryPoints": true
+	},
+	"google": {
+		"clientId": "1234567890-xxxx.apps.googleusercontent.com",
+		"holidayCalendarId": "en.italian#holiday@group.v.calendar.google.com"
+	}
+}
