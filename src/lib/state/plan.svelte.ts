@@ -651,10 +651,11 @@ export class PlanStore {
 	}
 
 	/** Bulk import (e.g. from Jira). Returns how many were added. */
-	addTasks(tasks: Array<Omit<Task, 'id'>>): number {
+	addTasks(tasks: Array<Omit<Task, 'id'> & { id?: string }>): number {
 		if (!tasks.length) return 0;
 		this.#commit('addTasks', (plan) => {
-			for (const task of tasks) plan.tasks.push({ ...task, id: newId() });
+			// Jira import pre-generates ids so children can point at their parent.
+			for (const task of tasks) plan.tasks.push({ ...task, id: task.id ?? newId() });
 		});
 		return tasks.length;
 	}

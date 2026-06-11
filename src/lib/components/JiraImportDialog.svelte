@@ -2,9 +2,10 @@
 	import {
 		detectEpicColorField,
 		ensureStoryPointsFields,
-		fetchChildrenStoryPointSum,
+		fetchChildIssues,
 		issuesToTasks,
-		jiraSearch
+		jiraSearch,
+		type JiraIssue
 	} from '$lib/integrations/jira';
 	import { store } from '$lib/state/plan.svelte';
 	import { settings } from '$lib/state/settings.svelte';
@@ -14,6 +15,7 @@
 	let jql = $state('');
 	let busy = $state(false);
 	let status = $state('');
+	let inheritColors = $state(true);
 
 	function close() {
 		ui.jiraImportOpen = false;
@@ -40,28 +42,39 @@
 				storyPointsFields: spFields,
 				epicColorField: colorField
 			});
-			if (spFields.length) {
-				// Epics rarely carry their own story points — sum their children's.
-				const linked = new Set(store.plan.tasks.map((t) => t.jiraKey).filter(Boolean));
-				for (const issue of issues) {
-					if (issue.storyPoints || linked.has(issue.key)) continue;
-					try {
-						const sum = await fetchChildrenStoryPointSum(settings.jira, issue.key, spFields);
-						if (sum > 0) issue.storyPoints = sum;
-					} catch {
-						// leave the estimate empty for this one
+			// Each matching issue brings its child work items along (epic → stories);
+			// they become child tasks carrying their own story-point estimates.
+			const seen = new Set(issues.map((i) => i.key));
+			const children: JiraIssue[] = [];
+			for (const issue of issues) {
+				try {
+					for (const child of await fetchChildIssues(settings.jira, issue.key, {
+						storyPointsFields: spFields,
+						epicColorField: colorField
+					})) {
+						if (!seen.has(child.key)) {
+							seen.add(child.key);
+							children.push(child);
+						}
 					}
+				} catch {
+					// children unavailable for this one — the issue itself still imports
 				}
 			}
-			const tasks = issuesToTasks(issues, store.plan.tasks);
+			const fetched = [...issues, ...children];
+			const tasks = issuesToTasks(fetched, store.plan.tasks, {
+				inheritParentColor: inheritColors
+			});
 			const added = store.addTasks(tasks);
-			const skipped = issues.length - tasks.length;
+			const childCount = tasks.filter((t) => t.parentId).length;
+			const skipped = fetched.length - tasks.length;
 			const estimated = tasks.filter((t) => t.estimateDays).length;
-			const colored = tasks.filter((t) =>
-				issues.some((i) => i.key === t.jiraKey && i.color)
+			const colored = tasks.filter(
+				(t) => !t.parentId && issues.some((i) => i.key === t.jiraKey && i.color)
 			).length;
 			status =
 				`✓ ${added} task${added === 1 ? '' : 's'} imported` +
+				(childCount ? ` (${childCount} child work item${childCount === 1 ? '' : 's'})` : '') +
 				(spFields.length
 					? ` · ${estimated} estimate${estimated === 1 ? '' : 's'} from story points`
 					: '') +
@@ -82,8 +95,8 @@
 			<p class="help warn">Configure the Jira connection in Settings first.</p>
 		{/if}
 		<p class="help">
-			Every matching issue becomes a task linked to its Jira key; issues whose parent is also in the
-			result become its workstreams. Epic colors become task colors when the site exposes them.
+			Every matching issue becomes a task linked to its Jira key, and brings its child work items
+			along as child tasks. Epic colors become task colors when the site exposes them.
 			{#if settings.jira.useStoryPoints}
 				Story points fill the estimates — 1 SP = 1 person-day, epics summing their children.
 			{:else}
@@ -105,6 +118,10 @@
 					placeholder="project = VULN AND type = Epic AND statusCategory != Done"
 					bind:value={jql}
 				/>
+			</label>
+			<label class="check">
+				<input type="checkbox" bind:checked={inheritColors} />
+				Child work items inherit their parent's color
 			</label>
 			<div class="row">
 				<button type="submit" disabled={busy || !jql.trim() || !settings.jiraConfigured()}>
@@ -147,6 +164,15 @@
 		border: 1px solid var(--border-strong);
 		border-radius: 6px;
 		width: 100%;
+	}
+	.check {
+		flex-direction: row;
+		align-items: center;
+		gap: 8px;
+		font-weight: 500;
+	}
+	.check input {
+		width: auto;
 	}
 	.row {
 		display: flex;

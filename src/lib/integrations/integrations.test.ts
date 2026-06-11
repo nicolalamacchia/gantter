@@ -42,6 +42,39 @@ describe('issuesToTasks', () => {
 		expect(tasks[0].color).not.toBe(tasks[1].color);
 	});
 
+	it('attaches child work items to their new parent and inherits its color by default', () => {
+		const tasks = issuesToTasks(
+			[
+				{ key: 'E-1', summary: 'Epic', color: '#2684ff' },
+				{ key: 'S-1', summary: 'Story', parentKey: 'E-1', color: '#57d9a3', storyPoints: 3 },
+				{ key: 'S-9', summary: 'Orphan', parentKey: 'E-404' }
+			],
+			[]
+		);
+		const epic = tasks.find((t) => t.jiraKey === 'E-1')!;
+		const story = tasks.find((t) => t.jiraKey === 'S-1')!;
+		expect(story.parentId).toBe(epic.id);
+		expect(story.color).toBe('#2684ff'); // inherited from the epic
+		expect(story.estimateDays).toBe(3); // children keep their own estimates
+		expect(tasks.find((t) => t.jiraKey === 'S-9')!.parentId).toBeUndefined();
+	});
+
+	it('keeps child colors when inheritance is off and attaches to existing linked parents', () => {
+		const existingEpic: Task = {
+			id: 'tEpic',
+			name: 'E-1 · Epic',
+			color: '#2684ff',
+			jiraKey: 'E-1'
+		};
+		const tasks = issuesToTasks(
+			[{ key: 'S-1', summary: 'Story', parentKey: 'E-1', color: '#57d9a3' }],
+			[existingEpic],
+			{ inheritParentColor: false }
+		);
+		expect(tasks[0].parentId).toBe('tEpic');
+		expect(tasks[0].color).toBe('#57d9a3');
+	});
+
 	it("prefers the issue's own Jira epic color over the palette", () => {
 		const tasks = issuesToTasks(
 			[

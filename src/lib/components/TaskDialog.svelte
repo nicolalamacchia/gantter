@@ -1,8 +1,11 @@
 <script lang="ts">
 	import {
+		detectEpicColorField,
 		ensureStoryPointsFields,
+		fetchChildIssues,
 		fetchIssueColor,
 		fetchStoryPoints,
+		issuesToTasks,
 		jiraPickIssues,
 		storyPointsToDays,
 		type JiraIssue
@@ -207,9 +210,36 @@
 			dependsOn: dependsOn.length ? [...dependsOn] : undefined,
 			jiraKey: jiraKey.trim() || undefined
 		};
-		if (editing) store.updateTask(editing.id, fields);
-		else store.addTask(fields, continueId || undefined);
+		if (editing) {
+			store.updateTask(editing.id, fields);
+		} else {
+			store.addTask(fields, continueId || undefined);
+			// Creating a task from a Jira issue also brings in its child work items.
+			if (fields.jiraKey) void importChildWorkItems(fields.jiraKey);
+		}
 		close();
+	}
+
+	async function importChildWorkItems(key: string) {
+		if (!settings.jiraConfigured()) return;
+		try {
+			let spFields: string[] = [];
+			if (settings.jira.useStoryPoints) {
+				spFields = await ensureStoryPointsFields(settings.jira, (ids) =>
+					settings.updateJira({ storyPointsField: ids })
+				).catch(() => []);
+			}
+			const colorField = await detectEpicColorField(settings.jira);
+			const children = await fetchChildIssues(settings.jira, key, {
+				storyPointsFields: spFields,
+				epicColorField: colorField
+			});
+			// The parent task is in the plan by now — children attach to it by key
+			// and inherit its color; already-linked keys are skipped.
+			store.addTasks(issuesToTasks(children, store.plan.tasks));
+		} catch {
+			// Jira unreachable or no children — the task itself is already created
+		}
 	}
 
 	function remove() {

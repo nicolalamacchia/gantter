@@ -99,8 +99,10 @@ stay with the user.
    and the token, then **Test connection**.
 3. Link a single task to an issue via the **Jira issue** field in the task editor — start typing
    and pick from the live autocomplete (selecting fills the task name) — or bulk-import tasks
-   with a JQL query via **⤓ Jira** next to “＋ New task” (also reachable from Settings). Linked
-   tasks are marked everywhere: a key chip in the sidebar and the Gantt (opening the issue), a 🔗
+   with a JQL query via **⤓ Jira** next to “＋ New task” (also reachable from Settings). Both
+   ways, the issue's child work items come along as child tasks carrying their own story-point
+   estimates (a checkbox in the import dialog controls whether they inherit the parent's color —
+   on by default). Linked tasks are marked everywhere: a key chip in the sidebar and the Gantt (opening the issue), a 🔗
    on their board blocks, and a link in the block popover. When the site exposes epic colors,
    linked and imported tasks adopt them as task colors.
 4. Optionally enable **Use story points as estimates** (1 SP = 1 person-day): linking and

@@ -1,4 +1,4 @@
-import type { Task } from '$lib/model/types';
+import { newId, type Task } from '$lib/model/types';
 import type { JiraSettings } from '$lib/state/settings.svelte';
 import { nextColor, PALETTE } from '$lib/model/colors';
 
@@ -390,30 +390,57 @@ export async function fetchStoryPoints(
 	return childSum > 0 ? childSum : null;
 }
 
+/** An issue's child work items (epic → stories, story → subtasks), one level deep. */
+export async function fetchChildIssues(
+	cfg: JiraSettings,
+	parentKey: string,
+	opts: { storyPointsFields?: string[]; epicColorField?: string | null } = {}
+): Promise<JiraIssue[]> {
+	return jiraSearch(cfg, `parent = "${parentKey}"`, 100, opts);
+}
+
 /**
- * Maps Jira issues to new tasks, skipping keys already linked in the plan.
- * Issues whose parent was also fetched (or already linked) become workstreams
- * of that parent task.
+ * Maps Jira issues (parents and their child work items) to new tasks with
+ * pre-generated ids, skipping keys already linked in the plan. A child
+ * attaches to its parent task — newly created or already existing — and
+ * inherits its color unless inheritParentColor is off.
  */
 export function issuesToTasks(
 	issues: JiraIssue[],
-	existing: Task[]
-): Array<Omit<Task, 'id'> & { jiraKey: string }> {
-	const existingKeys = new Set(existing.map((t) => t.jiraKey).filter(Boolean));
+	existing: Task[],
+	opts: { inheritParentColor?: boolean } = {}
+): Task[] {
+	const inherit = opts.inheritParentColor ?? true;
+	const existingByKey = new Map(
+		existing.filter((t) => t.jiraKey).map((t) => [t.jiraKey!, t] as const)
+	);
 	const usedColors = existing.map((t) => t.color);
-	const fresh = issues.filter((i) => !existingKeys.has(i.key));
-	return fresh.map((issue) => {
+	const fresh = issues.filter((i) => !existingByKey.has(i.key));
+	const byKey = new Map<string, Task>();
+	const tasks = fresh.map((issue) => {
 		// Jira's own epic color wins; otherwise pick a fresh palette color.
 		const color = issue.color ?? nextColor(usedColors);
 		usedColors.push(color);
-		return {
+		const task: Task = {
+			id: newId(),
 			name: issue.summary ? `${issue.key} · ${issue.summary}` : issue.key,
 			color,
 			jiraKey: issue.key,
 			estimateDays: issue.storyPoints ? storyPointsToDays(issue.storyPoints) : undefined,
 			notes: issue.status ? `Jira status: ${issue.status}` : undefined
 		};
+		byKey.set(issue.key, task);
+		return task;
 	});
+	for (const issue of fresh) {
+		if (!issue.parentKey) continue;
+		const parent = byKey.get(issue.parentKey) ?? existingByKey.get(issue.parentKey);
+		if (!parent) continue;
+		const child = byKey.get(issue.key)!;
+		child.parentId = parent.id;
+		if (inherit) child.color = parent.color;
+	}
+	return tasks;
 }
 
 // ---- auto-sync ------------------------------------------------------------------
