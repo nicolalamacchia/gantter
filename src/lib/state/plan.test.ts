@@ -407,6 +407,32 @@ describe('PlanStore commands', () => {
 		expect(store.plan.tasks.find((t) => t.id === 'U')?.dependsOn).toBeUndefined();
 	});
 
+	it('removeTasks deletes a whole selection with subtrees, assignments and dep references', () => {
+		const store = makeStore();
+		const plan = fixture();
+		plan.tasks = [
+			{ id: 'A', name: 'A', color: '#aaa' },
+			{ id: 'B', name: 'B (child of A)', color: '#bbb', parentId: 'A' },
+			{ id: 'C', name: 'C', color: '#ccc' },
+			{ id: 'D', name: 'D', color: '#ddd', dependsOn: ['A', 'C'] }
+		];
+		plan.assignments = [
+			{ id: 'aB', taskId: 'B', memberId: 'm1', days: 2, order: 0 },
+			{ id: 'aC', taskId: 'C', memberId: 'm2', days: 2, order: 0 }
+		];
+		store.importPlan(plan);
+
+		store.removeTasks(['A', 'C']);
+		expect(store.plan.tasks.map((t) => t.id)).toEqual(['D']);
+		expect(store.plan.assignments).toEqual([]);
+		// D depended on both deleted tasks — references stripped.
+		expect(store.plan.tasks[0].dependsOn).toBeUndefined();
+
+		// One undo restores the whole batch.
+		store.undo();
+		expect(store.plan.tasks.map((t) => t.id)).toEqual(['A', 'B', 'C', 'D']);
+	});
+
 	it('setTasksParent re-parents selection roots, keeps subtrees whole and refuses cycles', () => {
 		const store = makeStore();
 		const plan = fixture();

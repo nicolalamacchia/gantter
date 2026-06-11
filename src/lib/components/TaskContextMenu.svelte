@@ -199,6 +199,23 @@
 		>
 			Clear selection
 		</button>
+		<button
+			class="danger"
+			onclick={() => {
+				const ids = [...selection];
+				const label =
+					ids.length === 1
+						? `"${store.tasksById.get(ids[0])?.name ?? '?'}"`
+						: `${ids.length} tasks`;
+				close();
+				if (confirm(`Delete ${label}, with workstreams and all their assignments?`)) {
+					store.removeTasks(ids);
+					ui.highlight = null;
+				}
+			}}
+		>
+			🗑 Delete {selection.length === 1 ? 'task' : `${selection.length} tasks`}…
+		</button>
 	</div>
 {/if}
 
@@ -244,6 +261,12 @@
 	}
 	button:hover {
 		background: var(--hover);
+	}
+	button.danger {
+		color: var(--danger);
+	}
+	button.danger:hover {
+		background: var(--danger-bg);
 	}
 	hr {
 		border: none;

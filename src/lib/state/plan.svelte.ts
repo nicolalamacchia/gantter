@@ -733,8 +733,13 @@ export class PlanStore {
 	}
 
 	removeTask(id: string) {
-		this.#commit('removeTask', (plan) => {
-			const doomed = new Set<string>([id]);
+		this.removeTasks([id]);
+	}
+
+	/** Deletes tasks (the whole selection in one undoable commit), cascading to subtrees. */
+	removeTasks(ids: string[]) {
+		this.#commit('removeTasks', (plan) => {
+			const doomed = new Set<string>(ids);
 			let grew = true;
 			while (grew) {
 				grew = false;
