@@ -383,7 +383,7 @@
 				<select bind:value={continueId} onchange={prefillContinuation}>
 					<option value="">— no, this is a brand-new task —</option>
 					{#each continueChoices as c (c.task.id)}
-						<option value={c.task.id}>{c.planName} · {c.task.name}</option>
+						<option value={c.task.id}>{c.planName} · {c.path}</option>
 					{/each}
 				</select>
 			</label>
@@ -569,6 +569,10 @@
 		flex-direction: column;
 		gap: 12px;
 		font-size: 12.5px;
+		/* Long option texts (Jira paths) must not stretch the dialog — the
+		   closed select truncates; its native dropdown list stays full-width. */
+		width: 460px;
+		max-width: 100%;
 	}
 	label,
 	.field {
@@ -577,6 +581,7 @@
 		gap: 4px;
 		font-weight: 600;
 		color: var(--text-mid);
+		min-width: 0;
 	}
 	input,
 	select,
@@ -586,6 +591,11 @@
 		padding: 6px 8px;
 		border: 1px solid var(--border-strong);
 		border-radius: 6px;
+	}
+	select {
+		width: 100%;
+		min-width: 0;
+		text-overflow: ellipsis;
 	}
 	.grid2 {
 		display: grid;
