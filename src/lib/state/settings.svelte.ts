@@ -27,8 +27,12 @@ export interface GoogleSettings {
 	clientId: string;
 	/** Calendar id whose events become company holidays (e.g. a shared holidays calendar). */
 	holidayCalendarId?: string;
-	/** Push the plan to its Google Sheet after every change (write-only). Off by default. */
+	/** Push the selected periods to the Google Sheet after every change. Off by default. */
 	sheetAutoSync?: boolean;
+	/** Target spreadsheet id (paste a URL or id; created on first sync when empty). */
+	spreadsheetId?: string;
+	/** Period keys ("startDate:numWeeks") that sync to the spreadsheet — nothing else does. */
+	sheetPeriods?: string[];
 }
 
 interface Settings {

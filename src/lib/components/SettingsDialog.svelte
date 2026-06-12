@@ -20,7 +20,17 @@
 	import { store } from '$lib/state/plan.svelte';
 	import { connection } from '$lib/state/connection.svelte';
 	import { jiraSync, runJiraSync, SYNC_INTERVAL_MIN } from '$lib/state/jiraSync.svelte';
-	import { sheetDirty, sheetSync, sheetUrl, syncPlanToSheet } from '$lib/state/sheetSync.svelte';
+	import {
+		parseSpreadsheetId,
+		periodKey,
+		periodLabel,
+		resetSheetHashes,
+		sheetConfigured,
+		sheetDirty,
+		sheetSync,
+		sheetUrl,
+		syncPlanToSheet
+	} from '$lib/state/sheetSync.svelte';
 	import { serverConfig } from '$lib/state/serverConfig.svelte';
 	import { settings } from '$lib/state/settings.svelte';
 	import { ui } from '$lib/state/ui.svelte';
@@ -94,7 +104,34 @@
 	let googleBusy = $state(false);
 	const signedIn = $derived(connection.google);
 	const sheetIsDirty = $derived(sheetDirty());
+	const sheetIsConfigured = $derived(sheetConfigured());
 	const sheetLink = $derived(sheetUrl());
+
+	/** Sync candidates: every period plan known to the registry. */
+	const periodChoices = $derived(
+		store.registryPlans().map((p) => {
+			const label = periodLabel(p);
+			return {
+				id: p.id,
+				key: periodKey(p),
+				label: label === p.name ? label : `${label} · ${p.name}`,
+				hasData: p.tasks.length > 0 || p.absences.length > 0
+			};
+		})
+	);
+
+	function togglePeriod(key: string) {
+		const current = settings.google.sheetPeriods ?? [];
+		settings.updateGoogle({
+			sheetPeriods: current.includes(key) ? current.filter((k) => k !== key) : [...current, key]
+		});
+	}
+
+	function setSpreadsheet(value: string) {
+		settings.updateGoogle({ spreadsheetId: parseSpreadsheetId(value) || undefined });
+		// A different doc has seen nothing yet — every selected period is dirty again.
+		resetSheetHashes();
+	}
 
 	function close() {
 		settings.dialogOpen = false;
@@ -691,25 +728,54 @@
 		<section>
 			<h3>Google Sheets</h3>
 			<p class="help">
-				Mirrors the current period into a Google Sheet of its own (Board, Gantt and Tasks tabs),
-				created on the first sync. Write-only — the board stays the source of truth.
+				Mirrors the periods you pick into ONE spreadsheet — per period a colored board tab named
+				after it plus a Gantt tab (e.g. “Q1 2027” and “Q1 2027 Gantt”). Write-only: the board stays
+				the source of truth, and other tabs in the doc are left alone.
 				{#if !signedIn}Sign in with Google above first (re-consent adds the Sheets permission).{/if}
 			</p>
+			<label>
+				Spreadsheet
+				<input
+					type="text"
+					placeholder="Paste a spreadsheet URL or id — leave empty to create one on first sync"
+					value={settings.google.spreadsheetId ?? ''}
+					onchange={(e) => setSpreadsheet(e.currentTarget.value)}
+				/>
+			</label>
+			<div class="field">
+				<span>Periods to sync</span>
+				{#each periodChoices as p (p.id)}
+					<label class="check">
+						<input
+							type="checkbox"
+							checked={(settings.google.sheetPeriods ?? []).includes(p.key)}
+							onchange={() => togglePeriod(p.key)}
+						/>
+						{p.label}{p.hasData ? ' ●' : ''}
+					</label>
+				{:else}
+					<span class="help">No periods yet.</span>
+				{/each}
+			</div>
 			<label class="check">
 				<input
 					type="checkbox"
 					checked={settings.google.sheetAutoSync ?? false}
 					onchange={(e) => settings.updateGoogle({ sheetAutoSync: e.currentTarget.checked })}
 				/>
-				Sync to Google Sheets after every change
+				Sync the selected periods after every change
 			</label>
 			<div class="row">
 				<button
 					onclick={() => syncPlanToSheet()}
-					disabled={sheetSync.busy || !signedIn || !sheetIsDirty}
-					title="Push the current period to its Google Sheet"
+					disabled={sheetSync.busy || !signedIn || (sheetIsConfigured && !sheetIsDirty)}
+					title="Push the selected periods to the spreadsheet"
 				>
-					{sheetSync.busy ? 'Syncing…' : sheetIsDirty ? 'Sync now' : '✓ In sync'}
+					{sheetSync.busy
+						? 'Syncing…'
+						: sheetIsConfigured && !sheetIsDirty
+							? '✓ In sync'
+							: 'Sync now'}
 				</button>
 				{#if sheetLink}
 					<a class="sheet-link" href={sheetLink} target="_blank" rel="noreferrer">

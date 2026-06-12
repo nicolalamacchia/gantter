@@ -255,6 +255,14 @@ export class PlanStore {
 		this.#afterChange();
 	}
 
+	/** Every period plan in the registry (the active one is mirrored there), oldest first. */
+	registryPlans(): Plan[] {
+		void this.registryVersion;
+		return Object.values(this.#registry).sort(
+			(a, b) => a.startDate.localeCompare(b.startDate) || a.numWeeks - b.numWeeks
+		);
+	}
+
 	planForPeriod(startDate: ISODate, numWeeks: number): Plan | undefined {
 		if (this.plan.startDate === startDate && this.plan.numWeeks === numWeeks) return this.plan;
 		return Object.values(this.#registry).find(

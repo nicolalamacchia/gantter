@@ -53,6 +53,7 @@ in the image — the `.dockerignore` keeps them out of the build context too.
 | Switch views                 | **Board** (people × days) or **Gantt** (tasks × days) toggle in the toolbar; the Excel export contains a sheet for each. In the Gantt, rows are ordered by start date (▲▼ on hover nudges a task among its siblings and freezes a manual order), ▾/▸ collapses a parent's workstreams (the parent bar keeps showing the whole subtree) and ⊞/⊟ in the corner expand/collapse all                                                                                                                                                                                                                                    |
 | Create / edit a task         | **＋ New task** in the sidebar, or ✎ on a task row                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Delete a task                | ✕ on a task row (confirms; removes its workstreams and assignments too), or **Delete** in the task editor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Parent estimates             | A parent with estimated children shows **Σ children = Nd** in the editor — click it to adopt the sum, or tick **Auto** to keep the estimate at the children's rollup on every change                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Add a sub-team workstream    | ＋ on a top-level task row                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Schedule / split a task      | ▸ on a task row, pick members and days — or ⌥-drag the task (or the whole selection) from the list onto a member's column: each task lands as a block of its remaining estimate, queued at the drop date (tasks without an estimate, or already fully scheduled, are skipped)                                                                                                                                                                                                                                                                                                                                       |
 | Move a block                 | Drag it — moves within the person's own lane; **⇧-drag to move it to another person**; ⌥/Alt-drag moves all members' shares of the task together; ⌘-drag (Ctrl elsewhere) drops it into the middle of another block, splitting it; ⌥⌘-drag (Ctrl+Alt elsewhere) carves off the chunk from the grabbed day to the end and moves just that piece — the grid suppresses the browser context menu so these never fight it. The board rearranges live while dragging; the change is saved on release (Esc cancels)                                                                                                       |
@@ -161,17 +162,20 @@ uses the Node adapter (`npm run build && node build`); `npm run dev` works as al
 ### Google Sheets (live mirror)
 
 With the same Google sign-in (the Sheets scope was added — sign out and back in once to
-re-consent, and enable the **Google Sheets API** on the GCP project), the current period can be
-mirrored into a Google Sheet of its own with the familiar Board / Gantt / Tasks tabs:
+re-consent, and enable the **Google Sheets API** on the GCP project), the periods you pick are
+mirrored into ONE spreadsheet:
 
-- **Data → Sync to Google Sheet** (also in **⚙ Settings → Google Sheets**) pushes the plan,
-  creating the spreadsheet on the first sync — the button reads "✓ Synced" and disables while
-  the sheet already matches the plan. If you delete the doc, the next sync recreates it.
-- The **Sync to Google Sheets after every change** checkbox (off by default) pushes
+- In **⚙ Settings → Google Sheets**, tick the **periods to sync** (nothing syncs until you do)
+  and optionally paste an existing **spreadsheet URL or id** — leave it empty and the first
+  sync creates a doc and fills the field. Each period gets a colored board tab named after it
+  plus a Gantt tab (e.g. “Q1 2027” | “Q1 2027 Gantt”); tabs the app doesn't own are left alone.
+- **Data → Sync to Google Sheet** (or **Sync now** in Settings) pushes every selected period
+  that changed — the buttons read “✓ Synced” and disable while everything matches. A deleted
+  doc is recreated on the next sync; pasting a different spreadsheet marks everything unsynced.
+- The **Sync the selected periods after every change** checkbox (off by default) pushes
   automatically a moment after each edit settles (debounced, so a drag burst is one write).
 - Strictly write-only: the board is the source of truth and nothing is ever read back; edits
-  made in the sheet are overwritten on the next sync. Settings keeps an **Open the sheet ↗**
-  link per period.
+  made in the synced tabs are overwritten on the next push.
 
 ## Development
 

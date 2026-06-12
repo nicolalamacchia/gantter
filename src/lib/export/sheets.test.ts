@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeSchedule } from '$lib/engine/schedule';
 import type { Plan } from '$lib/model/types';
-import { buildSheetRequests, hexToColor } from './sheets';
+import { buildPeriodRequests, hexToColor } from './sheets';
 
 /** 2026-01-05 is a Monday; the 6th is a holiday. */
 function fixture(): Plan {
@@ -46,11 +46,12 @@ interface RequestShape {
 
 function build(): RequestShape[] {
 	const plan = fixture();
-	return buildSheetRequests(plan, computeSchedule(plan), {
-		board: 0,
-		gantt: 1,
-		tasks: 2
-	}) as RequestShape[];
+	return buildPeriodRequests(
+		plan,
+		computeSchedule(plan),
+		{ board: 4, gantt: 5 },
+		{ board: 'Q1 2026', gantt: 'Q1 2026 Gantt' }
+	) as RequestShape[];
 }
 
 function dataRows(reqs: RequestShape[], sheetId: number): Array<{ values: CellShape[] }> {
@@ -64,12 +65,11 @@ describe('Google Sheets export', () => {
 		expect(hexToColor('#000000')).toEqual({ red: 0, green: 0, blue: 0 });
 	});
 
-	it('rewrites all three tabs: retitle/resize, clear, then write', () => {
+	it('rewrites the period tabs under their period names: retitle/resize, clear, then write', () => {
 		const reqs = build();
 		for (const [sheetId, title, frozen] of [
-			[0, 'Board', 2],
-			[1, 'Gantt', 1],
-			[2, 'Tasks', 1]
+			[4, 'Q1 2026', 2],
+			[5, 'Q1 2026 Gantt', 1]
 		] as const) {
 			const props = reqs.find((r) => r.updateSheetProperties?.properties.sheetId === sheetId)!
 				.updateSheetProperties!.properties;
@@ -88,7 +88,7 @@ describe('Google Sheets export', () => {
 	});
 
 	it('mirrors the board: headers, task colors, holiday rows, legend', () => {
-		const board = dataRows(build(), 0);
+		const board = dataRows(build(), 4);
 		expect(board[1].values[1].userEnteredValue?.stringValue).toBe('Nicola');
 		// Mon Jan 5: m1 works on the task, painted in its color.
 		expect(board[2].values[1].userEnteredValue?.stringValue).toBe('Task');
@@ -105,10 +105,12 @@ describe('Google Sheets export', () => {
 		expect(merge.range.endColumnIndex).toBe(3); // both members sit in FE
 	});
 
-	it('writes the Tasks tab with rollup numbers', () => {
-		const tasks = dataRows(build(), 2);
-		expect(tasks[0].values[0].userEnteredValue?.stringValue).toBe('Task');
-		expect(tasks[1].values[0].userEnteredValue?.stringValue).toBe('Task');
-		expect(tasks[1].values[4].userEnteredValue?.numberValue).toBe(3); // assigned days
+	it('paints the Gantt tab: task row colored on its scheduled days', () => {
+		const gantt = dataRows(build(), 5);
+		expect(gantt[0].values[0].userEnteredValue?.stringValue).toBe('Task');
+		expect(gantt[1].values[0].userEnteredValue?.stringValue).toBe('Task');
+		// Mon Jan 5 is a working day on the task; Tue Jan 6 is the holiday.
+		expect(gantt[1].values[1].userEnteredFormat?.backgroundColor).toEqual(hexToColor('#2684ff'));
+		expect(gantt[1].values[2].userEnteredFormat?.backgroundColor).toEqual(hexToColor('#64748b'));
 	});
 });

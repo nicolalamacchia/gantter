@@ -15,10 +15,9 @@ const WEEKEND_GRAY = '#dde3ec';
 const ABSENCE_GRAY = '#94a3b8';
 const HEADER_GRAY = '#e2e8f0';
 
-export interface SheetTabIds {
+export interface PeriodTabIds {
 	board: number;
 	gantt: number;
-	tasks: number;
 }
 
 export function hexToColor(hex: string): { red: number; green: number; blue: number } {
@@ -207,44 +206,6 @@ function ganttGrid(plan: Plan, schedule: Schedule, rows: BoardRow[]): RowData[] 
 	return grid;
 }
 
-// ---- Tasks (WBS) tab ----------------------------------------------------------------
-
-function tasksGrid(plan: Plan, schedule: Schedule): RowData[] {
-	const tasksById = new Map(plan.tasks.map((t) => [t.id, t]));
-	const membersById = new Map(plan.members.map((m) => [m.id, m]));
-	const groupsById = new Map(plan.groups.map((g) => [g.id, g]));
-	const grid: RowData[] = [
-		{
-			values: [
-				'Task',
-				'Parent',
-				'Sub-team',
-				'Estimate (d)',
-				'Assigned (d)',
-				'Members',
-				'Start',
-				'End'
-			].map((h) => cell(h, { bold: true }))
-		}
-	];
-	for (const task of plan.tasks) {
-		const rollup = schedule.rollups[task.id];
-		grid.push({
-			values: [
-				cell(task.name, { bg: task.color, fg: bestTextOn(task.color) }),
-				cell(task.parentId ? (tasksById.get(task.parentId)?.name ?? '') : ''),
-				cell(task.groupId ? (groupsById.get(task.groupId)?.name ?? '') : ''),
-				cell(task.estimateDays ?? ''),
-				cell(rollup?.assignedDays || ''),
-				cell((rollup?.memberIds ?? []).map((id) => membersById.get(id)?.name ?? '?').join(', ')),
-				cell(rollup?.startDate ?? ''),
-				cell(rollup?.endDate ?? '')
-			]
-		});
-	}
-	return grid;
-}
-
 // ---- batchUpdate assembly -----------------------------------------------------------
 
 function colWidths(sheetId: number, widths: Array<{ from: number; to: number; px: number }>) {
@@ -297,15 +258,23 @@ function tabRequests(
 	];
 }
 
-/** Every request needed to make the spreadsheet mirror the plan. */
-export function buildSheetRequests(plan: Plan, schedule: Schedule, ids: SheetTabIds): object[] {
+/**
+ * Every request needed to mirror one period into its two tabs — the colored
+ * board and its Gantt — named after the period (e.g. "Q1 2027", "Q1 2027 Gantt").
+ */
+export function buildPeriodRequests(
+	plan: Plan,
+	schedule: Schedule,
+	ids: PeriodTabIds,
+	titles: { board: string; gantt: string }
+): object[] {
 	const columns = boardColumns(plan);
 	const rows = boardRows(plan);
 	const board = boardGrid(plan, schedule, columns, rows);
 	const legendCol = columns.length + 2;
 
 	const requests: object[] = [
-		...tabRequests(ids.board, 'Board', board, { rows: 2, cols: 1 }),
+		...tabRequests(ids.board, titles.board, board, { rows: 2, cols: 1 }),
 		...colWidths(ids.board, [
 			{ from: 0, to: 1, px: 80 },
 			{ from: 1, to: columns.length + 1, px: 190 },
@@ -336,16 +305,14 @@ export function buildSheetRequests(plan: Plan, schedule: Schedule, ids: SheetTab
 	}
 
 	requests.push(
-		...tabRequests(ids.gantt, 'Gantt', ganttGrid(plan, schedule, rows), { rows: 1, cols: 1 }),
+		...tabRequests(ids.gantt, titles.gantt, ganttGrid(plan, schedule, rows), {
+			rows: 1,
+			cols: 1
+		}),
 		...colWidths(ids.gantt, [
 			{ from: 0, to: 1, px: 320 },
 			{ from: 1, to: rows.length + 1, px: 24 }
-		]),
-		...tabRequests(ids.tasks, 'Tasks', tasksGrid(plan, schedule), { rows: 1, cols: 0 }),
-		...colWidths(
-			ids.tasks,
-			[320, 260, 110, 90, 90, 240, 90, 90].map((px, i) => ({ from: i, to: i + 1, px }))
-		)
+		])
 	);
 	return requests;
 }

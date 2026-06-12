@@ -8,7 +8,12 @@
 	import { trySilentSignIn } from '$lib/integrations/google';
 	import { connection } from '$lib/state/connection.svelte';
 	import { settings } from '$lib/state/settings.svelte';
-	import { sheetDirty, sheetSync, syncPlanToSheet } from '$lib/state/sheetSync.svelte';
+	import {
+		sheetConfigured,
+		sheetDirty,
+		sheetSync,
+		syncPlanToSheet
+	} from '$lib/state/sheetSync.svelte';
 	import { ui, type Theme } from '$lib/state/ui.svelte';
 
 	let fileInput = $state<HTMLInputElement>();
@@ -67,6 +72,7 @@
 	}
 
 	const sheetIsDirty = $derived(sheetDirty());
+	const sheetIsConfigured = $derived(sheetConfigured());
 
 	async function syncSheet() {
 		menu?.removeAttribute('open');
@@ -286,14 +292,16 @@
 				<hr />
 				<button
 					onclick={syncSheet}
-					disabled={sheetSync.busy || !sheetIsDirty}
-					title="Push this period to its Google Sheet (write-only; created on first sync)"
+					disabled={sheetSync.busy || (sheetIsConfigured && !sheetIsDirty)}
+					title="Push the periods selected in Settings → Google Sheets (write-only; the doc is created on first sync)"
 				>
 					{sheetSync.busy
 						? 'Syncing to Google Sheet…'
-						: sheetIsDirty
-							? 'Sync to Google Sheet'
-							: '✓ Synced to Google Sheet'}
+						: !sheetIsConfigured
+							? 'Sync to Google Sheet…'
+							: sheetIsDirty
+								? 'Sync to Google Sheet'
+								: '✓ Synced to Google Sheet'}
 				</button>
 			{/if}
 			<hr />
