@@ -339,6 +339,9 @@
 		return sum > 0 ? sum : null;
 	});
 
+	/** The picked parent's color — offered as a one-click choice for children. */
+	const parentColor = $derived(parentId ? store.tasksById.get(parentId)?.color : undefined);
+
 	/** Tasks that may serve as parent: anything except the edited task and its subtree. */
 	const parentOptions = $derived.by(() => {
 		const excluded = new Set<string>();
@@ -516,6 +519,18 @@
 					title="Custom color…"
 					aria-label="Custom color"
 				/>
+				{#if parentColor}
+					<button
+						type="button"
+						class="parent-color"
+						class:selected={color === parentColor}
+						title="Use the parent task's color"
+						onclick={() => (color = parentColor)}
+					>
+						<span class="swatch mini" style:background={parentColor}></span>
+						parent
+					</button>
+				{/if}
 			</div>
 		</div>
 		<div class="grid2">
@@ -895,6 +910,32 @@
 		cursor: pointer;
 	}
 	.swatch.selected {
+		outline: 2px solid var(--text);
+		outline-offset: 1px;
+	}
+	.swatch.mini {
+		width: 14px;
+		height: 14px;
+		flex: none;
+	}
+	.parent-color {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		font: inherit;
+		font-size: 11.5px;
+		font-weight: 600;
+		color: var(--text-mid);
+		padding: 2px 8px 2px 4px;
+		border: 1px solid var(--border-strong);
+		border-radius: 6px;
+		background: var(--panel);
+		cursor: pointer;
+	}
+	.parent-color:hover {
+		background: var(--hover);
+	}
+	.parent-color.selected {
 		outline: 2px solid var(--text);
 		outline-offset: 1px;
 	}

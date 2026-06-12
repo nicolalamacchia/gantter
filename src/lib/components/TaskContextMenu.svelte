@@ -23,6 +23,15 @@
 		selection.map((id) => store.tasksById.get(id)).filter((t): t is Task => !!t?.jiraKey)
 	);
 
+	/** Selected tasks whose parent wears a different color — targets for the color sync. */
+	const parentColorTargets = $derived(
+		selection.filter((id) => {
+			const task = store.tasksById.get(id);
+			const parent = task?.parentId ? store.tasksById.get(task.parentId) : undefined;
+			return !!parent && parent.color !== task?.color;
+		})
+	);
+
 	async function pullSelection() {
 		const ids = linkedSelection.map((t) => t.id);
 		close();
@@ -172,6 +181,19 @@
 					</button>
 				{/each}
 			</div>
+		{/if}
+		{#if parentColorTargets.length}
+			<button
+				title="Each selected task adopts its parent's color"
+				onclick={() => {
+					store.syncColorsWithParent(selection);
+					close();
+				}}
+			>
+				🎨 Use parent's color{parentColorTargets.length > 1
+					? ` (${parentColorTargets.length})`
+					: ''}
+			</button>
 		{/if}
 		{#if blockAssignmentId}
 			<hr />

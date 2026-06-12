@@ -780,6 +780,28 @@ export class PlanStore {
 		});
 	}
 
+	/**
+	 * Selection action: each task adopts its parent's color. Tasks without a
+	 * parent (or already matching) are skipped; returns how many changed.
+	 */
+	syncColorsWithParent(taskIds: string[]): number {
+		const qualifying = taskIds.filter((id) => {
+			const task = this.tasksById.get(id);
+			const parent = task?.parentId ? this.tasksById.get(task.parentId) : undefined;
+			return !!task && !!parent && parent.color !== task.color;
+		});
+		if (!qualifying.length) return 0;
+		this.#commit('syncColorsWithParent', (plan) => {
+			const byId = new Map(plan.tasks.map((t) => [t.id, t]));
+			for (const id of qualifying) {
+				const task = byId.get(id);
+				const parent = task?.parentId ? byId.get(task.parentId) : undefined;
+				if (task && parent) task.color = parent.color;
+			}
+		});
+		return qualifying.length;
+	}
+
 	/** Freezes an explicit Gantt order for a sibling group (after an up/down nudge). */
 	setGanttOrder(orderedIds: string[]) {
 		this.#commit('setGanttOrder', (plan) => {

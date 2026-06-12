@@ -476,6 +476,21 @@ describe('PlanStore commands', () => {
 		expect(store.subtreeEstimate('P')).toBe(13);
 	});
 
+	it('syncColorsWithParent recolors children only, skipping top-level and matching tasks', () => {
+		const store = makeStore();
+		store.addTask({ name: 'P', color: '#111111' }, 'P');
+		store.addTask({ name: 'A', color: '#222222', parentId: 'P' }, 'A');
+		store.addTask({ name: 'B', color: '#111111', parentId: 'P' }, 'B'); // already matches
+		// T is top-level (no parent), A differs, B already matches → only A changes.
+		expect(store.syncColorsWithParent(['T', 'A', 'B'])).toBe(1);
+		expect(store.tasksById.get('A')?.color).toBe('#111111');
+		expect(store.tasksById.get('T')?.color).toBe('#abc');
+		// Nothing qualifies → no commit, undo state untouched.
+		const canUndoBefore = store.canUndo;
+		expect(store.syncColorsWithParent(['T', 'B'])).toBe(0);
+		expect(store.canUndo).toBe(canUndoBefore);
+	});
+
 	it('autoEstimate parents track their children on every commit', () => {
 		const store = makeStore();
 		store.addTask({ name: 'P', color: '#111', autoEstimate: true }, 'P');
