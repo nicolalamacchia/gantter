@@ -914,6 +914,8 @@
 		overflow: auto;
 		position: relative;
 		background: var(--panel);
+		/* Breathing room under the last row, so its resize edge is grabbable. */
+		padding-bottom: 14px;
 	}
 	.placeholder {
 		padding: 48px;
