@@ -479,7 +479,8 @@ export function issuesToTasks(
 		usedColors.push(color);
 		const task: Task = {
 			id: newId(),
-			name: issue.summary ? `${issue.key} · ${issue.summary}` : issue.key,
+			// The key lives on task.jiraKey (chips and links everywhere) — no prefix.
+			name: issue.summary || issue.key,
 			color,
 			jiraKey: issue.key,
 			estimateDays: issue.storyPoints ? storyPointsToDays(issue.storyPoints) : undefined,
@@ -515,7 +516,9 @@ function followsJiraColor(color: string): boolean {
 
 /**
  * Diffs linked tasks against their Jira issues, conservatively:
- * - names refresh only while still auto-generated ("KEY · …" or bare "KEY");
+ * - names refresh only while still recognizably auto-generated: a bare "KEY"
+ *   or the legacy "KEY · …" shape migrates to the plain summary; any other
+ *   name is kept — a customized name and a drifted summary look the same;
  * - only the "Jira status: …" notes line is rewritten, never other notes;
  * - colors follow Jira only while the task wears a palette or Jira color
  *   (custom picks are kept);
@@ -533,7 +536,7 @@ export function buildJiraSyncUpdates(
 		const issue = task.jiraKey ? byKey.get(task.jiraKey) : undefined;
 		if (!issue) continue;
 		const fields: JiraSyncUpdate['fields'] = {};
-		const generated = issue.summary ? `${issue.key} · ${issue.summary}` : issue.key;
+		const generated = issue.summary || issue.key;
 		if (
 			(task.name === issue.key || task.name.startsWith(`${issue.key} · `)) &&
 			task.name !== generated

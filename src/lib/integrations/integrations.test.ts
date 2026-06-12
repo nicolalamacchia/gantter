@@ -25,7 +25,7 @@ describe('issuesToTasks', () => {
 			existing
 		);
 		expect(tasks).toHaveLength(1);
-		expect(tasks[0].name).toBe('VULN-2 · Findings page');
+		expect(tasks[0].name).toBe('Findings page'); // the key stays in task.jiraKey, not the name
 		expect(tasks[0].jiraKey).toBe('VULN-2');
 		expect(tasks[0].notes).toBe('Jira status: In Progress');
 		expect(tasks[0].color).not.toBe('#f5c6cb'); // existing color is avoided
@@ -165,7 +165,7 @@ describe('story points', () => {
 });
 
 describe('buildJiraSyncUpdates', () => {
-	it('refreshes auto-generated names, the status note and auto-assigned colors', () => {
+	it('migrates legacy "KEY · …" names to the plain summary, refreshes note and color', () => {
 		const tasks: Task[] = [
 			{
 				id: 't1',
@@ -182,7 +182,7 @@ describe('buildJiraSyncUpdates', () => {
 			{
 				taskId: 't1',
 				fields: {
-					name: 'A-1 · New summary',
+					name: 'New summary',
 					notes: 'Jira status: In Progress\nkeep this line',
 					color: '#8eb021'
 				}
@@ -207,15 +207,15 @@ describe('buildJiraSyncUpdates', () => {
 	});
 
 	it('follows Jira when the color was previously synced from Jira', () => {
-		const tasks: Task[] = [{ id: 't1', name: 'A-1 · x', color: '#2684ff', jiraKey: 'A-1' }];
+		const tasks: Task[] = [{ id: 't1', name: 'x', color: '#2684ff', jiraKey: 'A-1' }];
 		const updates = buildJiraSyncUpdates(tasks, [{ key: 'A-1', summary: 'x', color: '#57d9a3' }]);
 		expect(updates[0]?.fields).toEqual({ color: '#57d9a3' });
 	});
 
 	it('fills only EMPTY estimates from story points', () => {
 		const tasks: Task[] = [
-			{ id: 't1', name: 'A-1 · x', color: PALETTE[0], jiraKey: 'A-1', estimateDays: 5 },
-			{ id: 't2', name: 'A-2 · y', color: PALETTE[1], jiraKey: 'A-2' }
+			{ id: 't1', name: 'x', color: PALETTE[0], jiraKey: 'A-1', estimateDays: 5 },
+			{ id: 't2', name: 'y', color: PALETTE[1], jiraKey: 'A-2' }
 		];
 		const updates = buildJiraSyncUpdates(
 			tasks,
@@ -229,7 +229,7 @@ describe('buildJiraSyncUpdates', () => {
 	});
 
 	it('ignores tasks whose issue was not fetched (deleted or unlinked)', () => {
-		const tasks: Task[] = [{ id: 't1', name: 'A-1 · x', color: PALETTE[0], jiraKey: 'A-1' }];
+		const tasks: Task[] = [{ id: 't1', name: 'x', color: PALETTE[0], jiraKey: 'A-1' }];
 		expect(buildJiraSyncUpdates(tasks, [])).toEqual([]);
 	});
 });

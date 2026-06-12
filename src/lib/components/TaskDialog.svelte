@@ -105,7 +105,7 @@
 		clearTimeout(jiraTimer);
 		jiraReq++;
 		jiraKey = issue.key;
-		if (!name.trim()) name = `${issue.key} · ${issue.summary}`;
+		if (!name.trim()) name = issue.summary || issue.key;
 		jiraLookup = `✓ ${issue.key}: ${issue.summary}`;
 		jiraOpen = false;
 		jiraSuggestions = [];

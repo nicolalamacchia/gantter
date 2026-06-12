@@ -126,7 +126,8 @@ stay with the user.
    “Story Points” for company-managed projects, “Story point estimate” for team-managed ones).
 5. Optionally enable **Auto-sync linked tasks with Jira** (off by default): on every load and
    every 15 minutes (plus a **Sync now** button) linked tasks are refreshed — auto-generated
-   “KEY · summary” names, the “Jira status” note and epic colors update (custom names, colors
+   names (the issue summary; the key stays in its chip, not the name), the “Jira status” note
+   and epic colors update (custom names, colors
    and other notes are kept), and story points fill _empty_ estimates. Existing estimates never
    change automatically; “Check estimates from Jira” remains the review flow for those.
 6. Whenever the period has Jira-linked tasks, the task list header grows **⇣ Pull** and

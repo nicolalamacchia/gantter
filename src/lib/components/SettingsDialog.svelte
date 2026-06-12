@@ -476,7 +476,7 @@
 				Auto-sync linked tasks with Jira — on load and every {SYNC_INTERVAL_MIN} minutes
 			</label>
 			<p class="help">
-				Refreshes auto-generated “KEY · summary” names, the “Jira status” note and epic colors
+				Refreshes auto-generated names (the issue summary), the “Jira status” note and epic colors
 				(custom names and colors are kept), and fills <em>empty</em> estimates from story points. Existing
 				estimates never change automatically — review those with “Check estimates from Jira”.
 			</p>
