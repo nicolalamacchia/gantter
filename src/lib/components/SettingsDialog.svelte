@@ -794,7 +794,7 @@
 	.body {
 		display: flex;
 		flex-direction: column;
-		gap: 20px;
+		gap: 28px;
 		font-size: 12.5px;
 		min-width: 420px;
 	}
@@ -803,7 +803,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--text-muted);
-		margin: 0 0 8px;
+		margin: 0 0 10px;
 	}
 	.managed {
 		margin: 0;
@@ -841,9 +841,16 @@
 		margin-bottom: 4px;
 	}
 	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
 		font-weight: 600;
 		color: var(--text-mid);
-		margin-top: 10px;
+		margin: 10px 0;
+	}
+	/* Checkbox lists inside a field stay compact — the flex gap is the rhythm. */
+	.field .check {
+		margin: 0;
 	}
 	.weekdays {
 		display: flex;
@@ -880,7 +887,7 @@
 		align-items: center;
 		gap: 8px;
 		font-weight: 500;
-		margin-bottom: 0;
+		margin: 4px 0 10px;
 	}
 	.check input {
 		width: auto;
@@ -894,7 +901,7 @@
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		margin-bottom: 6px;
+		margin-bottom: 8px;
 	}
 	.row input {
 		flex: 1;
@@ -959,6 +966,10 @@
 	.status {
 		font-size: 12px;
 		color: var(--ok);
+	}
+	/* Block-level statuses (e.g. “✓ Signed in”) breathe before the next field. */
+	div.status {
+		margin: 2px 0 12px;
 	}
 	.status.err {
 		color: var(--danger);
