@@ -4,6 +4,7 @@ import {
 	addWorkingDays,
 	countWorkingDays,
 	nextWorkingDay,
+	periodEndOf,
 	type WorkCalendar
 } from '$lib/engine/calendar';
 import {
@@ -333,7 +334,7 @@ export class PlanStore {
 	 */
 	rolloverTaskSpill(taskId: string, startDate: ISODate, numWeeks: number, label: string): number {
 		if (this.plan.startDate === startDate && this.plan.numWeeks === numWeeks) return 0;
-		const periodEnd = addDays(this.plan.startDate, this.plan.numWeeks * 7 - 1);
+		const periodEnd = periodEndOf(this.plan.startDate, this.plan.numWeeks);
 		const source = this.#snapshot();
 		const schedule = this.schedule;
 		const closure = new Set<string>();

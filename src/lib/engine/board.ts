@@ -1,5 +1,5 @@
 import type { Absence, ISODate, Plan } from '$lib/model/types';
-import { addDays, isoWeekday, startOfWeek } from './calendar';
+import { addDays, isoWeekday, periodEndOf, startOfWeek } from './calendar';
 
 /** memberId → ISO date → absenceId, for cell rendering and PTO removal. */
 export function buildAbsenceDayMap(absences: Absence[]): Record<string, Record<ISODate, string>> {
@@ -53,8 +53,8 @@ export function boardRows(plan: Plan): BoardRow[] {
 	const workdaySet = new Set(plan.workdays);
 	const holidays = new Set(plan.holidays);
 	const rows: BoardRow[] = [];
-	for (let i = 0; i < plan.numWeeks * 7; i++) {
-		const date = addDays(plan.startDate, i);
+	const end = periodEndOf(plan.startDate, plan.numWeeks);
+	for (let date = plan.startDate; date <= end; date = addDays(date, 1)) {
 		const isWorkweekDay = workdaySet.has(isoWeekday(date));
 		if (!isWorkweekDay && !plan.showWeekends) continue;
 		const weekStart = startOfWeek(date);

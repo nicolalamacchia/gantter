@@ -1,4 +1,4 @@
-import { addDays, formatMonthDay, quarterOf } from '$lib/engine/calendar';
+import { addDays, formatMonthDay, periodEndOf, quarterOf } from '$lib/engine/calendar';
 import type { ISODate } from '$lib/model/types';
 import { store } from './plan.svelte';
 
@@ -24,7 +24,7 @@ function spillDaysFor(taskId: string, periodEnd: ISODate): number {
  * Returns true when something was rolled over.
  */
 export function maybeOfferRollover(taskId: string, prevEnd: ISODate | null): boolean {
-	const periodEnd = addDays(store.plan.startDate, store.plan.numWeeks * 7 - 1);
+	const periodEnd = periodEndOf(store.plan.startDate, store.plan.numWeeks);
 	const end = store.schedule.rollups[taskId]?.endDate ?? null;
 	if (!end || end <= periodEnd) return false;
 	// Only when this edit pushed the end LATER: reducing days, or rearranging a

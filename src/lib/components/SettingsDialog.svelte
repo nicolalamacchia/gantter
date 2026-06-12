@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { addDays, formatMonthDay } from '$lib/engine/calendar';
+	import { addDays, formatMonthDay, periodEndOf } from '$lib/engine/calendar';
 	import {
 		fetchCalendarDates,
 		fetchOutOfOffice,
@@ -66,7 +66,7 @@
 		holidayProposals = [];
 		try {
 			const timeMin = store.plan.startDate;
-			const timeMax = addDays(store.plan.startDate, store.plan.numWeeks * 7);
+			const timeMax = addDays(periodEndOf(store.plan.startDate, store.plan.numWeeks), 1);
 			const dates = await fetchCalendarDates(calendarId, timeMin, timeMax);
 			const existing = new Set(store.plan.holidays);
 			holidayProposals = dates
@@ -299,7 +299,7 @@
 			return;
 		}
 		const timeMin = store.plan.startDate;
-		const timeMax = addDays(store.plan.startDate, store.plan.numWeeks * 7);
+		const timeMax = addDays(periodEndOf(store.plan.startDate, store.plan.numWeeks), 1);
 		const proposals: PtoProposal[] = [];
 		const failures: string[] = [];
 		for (const member of linked) {

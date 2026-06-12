@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { addDays, quarterOf, quartersAround, toISO } from '$lib/engine/calendar';
+	import { addDays, periodEndOf, quarterOf, quartersAround, toISO } from '$lib/engine/calendar';
 	import { jiraIssueUrl } from '$lib/integrations/jira';
 	import { clampToViewport } from './clampToViewport';
 	import { store } from '$lib/state/plan.svelte';
@@ -56,7 +56,9 @@
 	const targets = $derived(
 		quarters.filter((q) => !(q.start === store.plan.startDate && q.weeks === store.plan.numWeeks))
 	);
-	const nextQuarter = $derived(quarterOf(addDays(store.plan.startDate, store.plan.numWeeks * 7)));
+	const nextQuarter = $derived(
+		quarterOf(addDays(periodEndOf(store.plan.startDate, store.plan.numWeeks), 1))
+	);
 
 	const pos = $derived.by(() => {
 		if (!ui.contextMenu) return { x: 0, y: 0 };

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { addDays, formatMonthDay } from '$lib/engine/calendar';
+	import { formatMonthDay, periodEndOf } from '$lib/engine/calendar';
 	import { jiraIssueUrl } from '$lib/integrations/jira';
 	import type { Task } from '$lib/model/types';
 	import { store } from '$lib/state/plan.svelte';
@@ -222,7 +222,7 @@
 		return !!task.estimateDays && !!rollup?.assignedDays && rollup.assignedDays < task.estimateDays;
 	}
 
-	const periodEnd = $derived(addDays(store.plan.startDate, store.plan.numWeeks * 7 - 1));
+	const periodEnd = $derived(periodEndOf(store.plan.startDate, store.plan.numWeeks));
 
 	function overflows(task: Task): boolean {
 		const end = store.schedule.rollups[task.id]?.endDate;

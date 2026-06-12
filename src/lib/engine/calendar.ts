@@ -34,6 +34,8 @@ export function diffDays(a: ISODate, b: ISODate): number {
 export interface Quarter {
 	label: string;
 	start: ISODate;
+	/** Last day of the quarter. */
+	end: ISODate;
 	/** Weeks needed to cover the quarter (ceil). */
 	weeks: number;
 }
@@ -47,6 +49,7 @@ export function quarterOf(iso: ISODate): Quarter {
 	return {
 		label: `Q${q + 1} ${year}`,
 		start,
+		end: addDays(nextStart, -1),
 		weeks: Math.ceil(diffDays(start, nextStart) / 7)
 	};
 }
@@ -59,10 +62,20 @@ export function quartersAround(iso: ISODate, before = 2, after = 5): Quarter[] {
 	for (let i = 0; i < before + after + 1; i++) {
 		const q = quarterOf(cursor);
 		quarters.push(q);
-		cursor = addDays(q.start, q.weeks * 7 + 1);
-		cursor = quarterOf(cursor).start;
+		cursor = quarterOf(addDays(q.end, 1)).start;
 	}
 	return quarters;
+}
+
+/**
+ * Last day of a plan's horizon. Quarter-shaped periods (start and weeks
+ * exactly as the picker creates them) end on the quarter's last day — the
+ * ceil(weeks) cover would otherwise spill a few days into the next quarter.
+ */
+export function periodEndOf(startDate: ISODate, numWeeks: number): ISODate {
+	const q = quarterOf(startDate);
+	if (q.start === startDate && q.weeks === numWeeks) return q.end;
+	return addDays(startDate, numWeeks * 7 - 1);
 }
 
 /** Every date from `start` to `end`, both inclusive. */
