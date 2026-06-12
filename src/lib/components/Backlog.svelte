@@ -6,10 +6,6 @@
 	import { settings } from '$lib/state/settings.svelte';
 	import { ui } from '$lib/state/ui.svelte';
 
-	function childMatches(c: Task): boolean {
-		return ui.groupFilter === 'all' || !c.groupId || c.groupId === ui.groupFilter;
-	}
-
 	let asideEl = $state<HTMLElement>();
 
 	function startResize(e: PointerEvent) {
@@ -28,25 +24,24 @@
 		handle.addEventListener('pointerup', onUp);
 	}
 
-	const items = $derived.by(() =>
-		store.rootTasks
-			.map((task) => ({
-				task,
-				children: (store.childrenByParent.get(task.id) ?? []).filter(childMatches)
-			}))
-			.filter(
-				({ task, children }) =>
-					ui.groupFilter === 'all' ||
-					!task.groupId ||
-					task.groupId === ui.groupFilter ||
-					children.length > 0
-			)
-	);
+	/** Flat visible rows, depth-first: a task shows when it or any descendant matches the filter. */
+	const rows = $derived.by(() => {
+		const matches = (t: Task): boolean =>
+			ui.groupFilter === 'all' || !t.groupId || t.groupId === ui.groupFilter;
+		const subtreeMatches = (t: Task): boolean =>
+			matches(t) || (store.childrenByParent.get(t.id) ?? []).some(subtreeMatches);
+		const out: Array<{ task: Task; depth: number }> = [];
+		const walk = (t: Task, depth: number) => {
+			if (!subtreeMatches(t)) return;
+			out.push({ task: t, depth });
+			for (const c of store.childrenByParent.get(t.id) ?? []) walk(c, depth + 1);
+		};
+		for (const t of store.rootTasks) walk(t, 0);
+		return out;
+	});
 
 	/** Visible list order, for ⇧ range selection. */
-	const visibleIds = $derived(
-		items.flatMap(({ task, children }) => [task.id, ...children.map((c) => c.id)])
-	);
+	const visibleIds = $derived(rows.map((r) => r.task.id));
 
 	function onTaskClick(e: MouseEvent, taskId: string) {
 		if (suppressClick) return;
@@ -282,16 +277,9 @@
 			</span>
 		</header>
 		<ul>
-			{#each items as { task, children } (task.id)}
-				<li>
-					{@render taskRow(task, false)}
-					{#if children.length}
-						<ul class="children">
-							{#each children as child (child.id)}
-								<li>{@render taskRow(child, true)}</li>
-							{/each}
-						</ul>
-					{/if}
+			{#each rows as { task, depth } (task.id)}
+				<li style:padding-left="{depth * 18}px">
+					{@render taskRow(task, depth > 0)}
 				</li>
 			{:else}
 				<li class="empty">No tasks yet.</li>
@@ -379,9 +367,7 @@
 				▸
 			</button>
 			<button title="Edit task" onclick={() => ui.openEditTask(task.id)}>✎</button>
-			{#if !isChild}
-				<button title="Add sub-team workstream" onclick={() => ui.openNewTask(task.id)}>＋</button>
-			{/if}
+			<button title="Add sub-team workstream" onclick={() => ui.openNewTask(task.id)}>＋</button>
 			<button class="del" title="Delete task…" onclick={() => removeTask(task)}>✕</button>
 		</div>
 	</div>
@@ -449,9 +435,6 @@
 		list-style: none;
 		margin: 0;
 		padding: 6px 8px;
-	}
-	.children {
-		padding: 0 0 0 18px;
 	}
 	.empty {
 		color: var(--text-faint);

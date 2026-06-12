@@ -400,6 +400,37 @@ export async function fetchChildIssues(
 }
 
 /**
+ * An issue's whole descendant tree (epic → stories → subtasks), walked level
+ * by level with batched `parent in (...)` JQL — one request per level per 50
+ * parents. Depth-capped defensively; seen keys are never re-fetched.
+ */
+export async function fetchChildIssuesRecursive(
+	cfg: JiraSettings,
+	parentKey: string,
+	opts: { storyPointsFields?: string[]; epicColorField?: string | null } = {},
+	maxDepth = 4
+): Promise<JiraIssue[]> {
+	const out: JiraIssue[] = [];
+	const seen = new Set<string>([parentKey]);
+	let frontier = [parentKey];
+	for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+		const next: string[] = [];
+		for (let i = 0; i < frontier.length; i += 50) {
+			const chunk = frontier.slice(i, i + 50);
+			const jql = `parent in (${chunk.map((k) => `"${k}"`).join(', ')})`;
+			for (const child of await jiraSearch(cfg, jql, 200, opts)) {
+				if (seen.has(child.key)) continue;
+				seen.add(child.key);
+				out.push(child);
+				next.push(child.key);
+			}
+		}
+		frontier = next;
+	}
+	return out;
+}
+
+/**
  * Maps Jira issues (parents and their child work items) to new tasks with
  * pre-generated ids, skipping keys already linked in the plan. A child
  * attaches to its parent task — newly created or already existing — and

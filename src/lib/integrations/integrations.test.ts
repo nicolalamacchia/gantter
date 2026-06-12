@@ -59,6 +59,23 @@ describe('issuesToTasks', () => {
 		expect(tasks.find((t) => t.jiraKey === 'S-9')!.parentId).toBeUndefined();
 	});
 
+	it('links whole multi-level trees: epic → story → subtask', () => {
+		const tasks = issuesToTasks(
+			[
+				{ key: 'E-1', summary: 'Epic', color: '#2684ff' },
+				{ key: 'S-1', summary: 'Story', parentKey: 'E-1' },
+				{ key: 'SUB-1', summary: 'Subtask', parentKey: 'S-1' }
+			],
+			[]
+		);
+		const epic = tasks.find((t) => t.jiraKey === 'E-1')!;
+		const story = tasks.find((t) => t.jiraKey === 'S-1')!;
+		const sub = tasks.find((t) => t.jiraKey === 'SUB-1')!;
+		expect(story.parentId).toBe(epic.id);
+		expect(sub.parentId).toBe(story.id);
+		expect(sub.color).toBe(epic.color); // inheritance cascades down the tree
+	});
+
 	it('keeps child colors when inheritance is off and attaches to existing linked parents', () => {
 		const existingEpic: Task = {
 			id: 'tEpic',

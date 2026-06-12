@@ -111,8 +111,9 @@ stay with the user.
    and pick from the live autocomplete (selecting fills the task name) — or bulk-import tasks
    with a JQL query via **⤓ Jira** next to “＋ New task” (also reachable from Settings). Both
    ways, the issue's child work items come along as child tasks carrying their own story-point
-   estimates — in the task editor they appear as a pre-checked review list (All/None; pick the
-   ones to import, already-linked ones are skipped) before you hit Create; a checkbox controls
+   estimates — in the task editor the whole descendant tree (stories and their subtasks) appears
+   as a pre-checked, indented review list (All/None; pick the ones to import, already-linked ones
+   are skipped; unchecking a parent drops its subtree) before you hit Create; a checkbox controls
    whether they inherit the parent's color (on by default). The task's estimate follows the
    selected children's story points; a second checkbox (off by default) keeps Jira's original
    total instead, even when only a subset is imported. Linked tasks are marked everywhere: a key chip in the sidebar and the Gantt (opening the issue), a 🔗

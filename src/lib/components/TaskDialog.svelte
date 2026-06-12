@@ -2,7 +2,7 @@
 	import {
 		detectEpicColorField,
 		ensureStoryPointsFields,
-		fetchChildIssues,
+		fetchChildIssuesRecursive,
 		fetchIssueColor,
 		fetchStoryPoints,
 		issuesToTasks,
@@ -117,7 +117,10 @@
 	// ---- child work items: fetched when a Jira issue is set, reviewed before import ----
 
 	const JIRA_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+	/** The issue's whole descendant tree, in depth-first order. */
 	let childIssues = $state<JiraIssue[]>([]);
+	/** key → nesting depth under the typed issue (0 = direct child). */
+	let childDepths = $state<Record<string, number>>({});
 	/** key → import it; "Create" imports only the checked ones. */
 	let childSel = $state<Record<string, boolean>>({});
 	let childrenBusy = $state(false);
@@ -134,17 +137,47 @@
 	);
 	const childSelectedCount = $derived(childIssues.filter((c) => childSel[c.key]).length);
 
+	const childByKey = $derived(new Map(childIssues.map((c) => [c.key, c])));
+	/** Parent key → direct children, within the fetched set. */
+	const childByParent = $derived.by(() => {
+		const map = new Map<string, JiraIssue[]>();
+		for (const c of childIssues) {
+			if (!c.parentKey || !childByKey.has(c.parentKey)) continue;
+			const list = map.get(c.parentKey) ?? [];
+			list.push(c);
+			map.set(c.parentKey, list);
+		}
+		return map;
+	});
+
+	/** True when an ancestor inside the set carries points (and is checked, if asked). */
+	function spInAncestors(issue: JiraIssue, selectedOnly: boolean): boolean {
+		let p = issue.parentKey ? childByKey.get(issue.parentKey) : undefined;
+		while (p) {
+			if (p.storyPoints && (!selectedOnly || childSel[p.key])) return true;
+			p = p.parentKey ? childByKey.get(p.parentKey) : undefined;
+		}
+		return false;
+	}
+
+	/**
+	 * Sum story points without double counting across levels: an issue counts
+	 * only when no (checked) ancestor carries points of its own — a story's
+	 * estimate already includes its subtasks'.
+	 */
+	function sumDays(include: (c: JiraIssue) => boolean, selectedOnly: boolean): number | null {
+		let sum = 0;
+		for (const c of childIssues) {
+			if (!c.storyPoints || !include(c) || spInAncestors(c, selectedOnly)) continue;
+			sum += c.storyPoints;
+		}
+		return sum > 0 ? storyPointsToDays(sum) : null;
+	}
+
 	/** The original total in days: Jira's own number, else the sum over ALL children. */
-	const jiraFullTotal = $derived.by(() => {
-		if (jiraTotalDays) return jiraTotalDays;
-		const sum = childIssues.reduce((s, c) => s + (c.storyPoints ?? 0), 0);
-		return sum > 0 ? storyPointsToDays(sum) : null;
-	});
+	const jiraFullTotal = $derived(jiraTotalDays ?? sumDays(() => true, false));
 	/** Sum of the checked children's story points, in days. */
-	const childSelectedDays = $derived.by(() => {
-		const sum = childIssues.reduce((s, c) => s + (childSel[c.key] ? (c.storyPoints ?? 0) : 0), 0);
-		return sum > 0 ? storyPointsToDays(sum) : null;
-	});
+	const childSelectedDays = $derived(sumDays((c) => !!childSel[c.key], true));
 
 	const childrenHaveSP = $derived(childIssues.some((c) => c.storyPoints));
 
@@ -155,17 +188,63 @@
 	}
 
 	function toggleChild(key: string) {
-		childSel[key] = !childSel[key];
+		const on = !childSel[key];
+		childSel[key] = on;
+		if (on) {
+			// A checked child needs its ancestors to attach to — check them too,
+			// stopping at ones already in the plan (the child attaches to those).
+			for (let p = childByKey.get(key)?.parentKey; p && childByKey.has(p); ) {
+				if (linkedKeys.has(p)) break;
+				childSel[p] = true;
+				p = childByKey.get(p)?.parentKey;
+			}
+		} else {
+			// Unchecking a parent drops its whole subtree.
+			const walk = (k: string) => {
+				for (const c of childByParent.get(k) ?? []) {
+					childSel[c.key] = false;
+					walk(c.key);
+				}
+			};
+			walk(key);
+		}
 		applyEstimateFromChildren();
 	}
 
 	function resetChildren() {
 		childReq++;
 		childIssues = [];
+		childDepths = {};
 		childSel = {};
 		childrenBusy = false;
 		keepOriginalEstimate = false;
 		jiraTotalDays = null;
+	}
+
+	/** Orders fetched issues depth-first under the typed key (orphans fold to the top). */
+	function treeOrder(children: JiraIssue[]): {
+		ordered: JiraIssue[];
+		depths: Record<string, number>;
+	} {
+		const keys = new Set(children.map((c) => c.key));
+		const byParent = new Map<string, JiraIssue[]>();
+		for (const c of children) {
+			const p = c.parentKey && keys.has(c.parentKey) ? c.parentKey : '';
+			const list = byParent.get(p) ?? [];
+			list.push(c);
+			byParent.set(p, list);
+		}
+		const ordered: JiraIssue[] = [];
+		const depths: Record<string, number> = {};
+		const walk = (parent: string, depth: number) => {
+			for (const c of byParent.get(parent) ?? []) {
+				ordered.push(c);
+				depths[c.key] = depth;
+				walk(c.key, depth + 1);
+			}
+		};
+		walk('', 0);
+		return { ordered, depths };
 	}
 
 	/** Fetches the issue's child work items, pre-selecting the ones not in the plan yet. */
@@ -182,14 +261,16 @@
 				).catch(() => []);
 			}
 			const colorField = await detectEpicColorField(settings.jira);
-			const children = await fetchChildIssues(settings.jira, key, {
+			const children = await fetchChildIssuesRecursive(settings.jira, key, {
 				storyPointsFields: spFields,
 				epicColorField: colorField
 			});
 			if (req !== childReq || jiraKey.trim() !== key) return;
-			childIssues = children;
+			const { ordered, depths } = treeOrder(children);
+			childIssues = ordered;
+			childDepths = depths;
 			childSel = Object.fromEntries(
-				children.filter((c) => !linkedKeys.has(c.key)).map((c) => [c.key, true])
+				ordered.filter((c) => !linkedKeys.has(c.key)).map((c) => [c.key, true])
 			);
 			applyEstimateFromChildren();
 		} catch {
@@ -349,13 +430,13 @@
 				).catch(() => []);
 			}
 			const colorField = await detectEpicColorField(settings.jira);
-			const children = await fetchChildIssues(settings.jira, key, {
+			const children = await fetchChildIssuesRecursive(settings.jira, key, {
 				storyPointsFields: spFields,
 				epicColorField: colorField
 			});
 			// The parent task is in the plan by now — children attach to it by key
 			// and inherit its color; already-linked keys are skipped.
-			store.addTasks(issuesToTasks(children, store.plan.tasks));
+			store.addTasks(issuesToTasks(treeOrder(children).ordered, store.plan.tasks));
 		} catch {
 			// Jira unreachable or no children — the task itself is already created
 		}
@@ -496,7 +577,7 @@
 				{#if childIssues.length}
 					<div class="deps">
 						{#each childIssues as c (c.key)}
-							<label class="dep">
+							<label class="dep" style:padding-left="{(childDepths[c.key] ?? 0) * 18}px">
 								<input
 									type="checkbox"
 									checked={!!childSel[c.key]}
