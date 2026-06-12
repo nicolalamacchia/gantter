@@ -14,6 +14,11 @@ function migrate(doc: unknown): Plan | null {
 	if (
 		typeof plan.schemaVersion !== 'number' ||
 		plan.schemaVersion > SCHEMA_VERSION ||
+		// The period (dates/quarter) must round-trip: imports attach to the
+		// period the file describes, so a plan without one is unusable.
+		!/^\d{4}-\d{2}-\d{2}$/.test(plan.startDate ?? '') ||
+		typeof plan.numWeeks !== 'number' ||
+		plan.numWeeks < 1 ||
 		!Array.isArray(plan.members) ||
 		!Array.isArray(plan.tasks) ||
 		!Array.isArray(plan.assignments)
