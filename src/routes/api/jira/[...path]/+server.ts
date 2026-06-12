@@ -44,7 +44,11 @@ const handler: RequestHandler = async ({ params, request, url }) => {
 	} catch {
 		return json({ error: 'Could not reach Jira' }, { status: 502 });
 	}
-	return new Response(await upstream.text(), {
+	// Successful PUTs answer 204 No Content; a Response with a null-body status
+	// must get a null body — even an empty string throws and turned every
+	// successful write into a 500.
+	const body = await upstream.text();
+	return new Response(body.length ? body : null, {
 		status: upstream.status,
 		headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' }
 	});
