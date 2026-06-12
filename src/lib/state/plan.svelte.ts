@@ -439,21 +439,33 @@ export class PlanStore {
 		return spills.reduce((sum, s) => sum + s.spillDays, 0);
 	}
 
-	/** Tasks from other periods that don't exist here yet — candidates for continuation. */
-	registryTaskChoices(): Array<{ planName: string; task: Task }> {
+	/**
+	 * Tasks from PREVIOUS periods that don't exist here yet — candidates for
+	 * continuation. Paths are computed inside the source plan; when the same
+	 * task id lives in several previous periods, the most recent one wins.
+	 */
+	registryTaskChoices(): Array<{ planName: string; task: Task; path: string }> {
 		void this.registryVersion;
 		const currentIds = new Set(this.plan.tasks.map((t) => t.id));
 		const seen = new Set<string>();
-		const out: Array<{ planName: string; task: Task }> = [];
-		for (const plan of Object.values(this.#registry)) {
-			if (plan.id === this.plan.id) continue;
+		const out: Array<{ planName: string; task: Task; path: string }> = [];
+		const previous = Object.values(this.#registry)
+			.filter((p) => p.id !== this.plan.id && p.startDate < this.plan.startDate)
+			.sort((a, b) => b.startDate.localeCompare(a.startDate));
+		for (const plan of previous) {
+			const byId = new Map(plan.tasks.map((t) => [t.id, t]));
 			for (const task of plan.tasks) {
 				if (currentIds.has(task.id) || seen.has(task.id)) continue;
 				seen.add(task.id);
-				out.push({ planName: plan.name, task });
+				const parts: string[] = [];
+				for (let t: Task | undefined = task, i = 0; t && i < 10; i++) {
+					parts.unshift(t.name);
+					t = t.parentId ? byId.get(t.parentId) : undefined;
+				}
+				out.push({ planName: plan.name, task, path: parts.join(' / ') });
 			}
 		}
-		return out.sort((a, b) => a.task.name.localeCompare(b.task.name));
+		return out.sort((a, b) => a.path.localeCompare(b.path));
 	}
 
 	/**

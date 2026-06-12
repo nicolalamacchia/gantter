@@ -465,6 +465,19 @@ describe('PlanStore commands', () => {
 		expect(store.plan.tasks.find((t) => t.id === 'B')?.parentId).toBe('A');
 	});
 
+	it('registryTaskChoices offers only tasks from previous periods, with full paths', () => {
+		const store = makeStore(); // active period starts 2026-01-05
+		store.addTask({ name: 'FE', color: '#abc', parentId: 'T' }, 'T-FE');
+		// From a later period, the January tasks are continuation candidates.
+		store.switchToPeriod('2030-01-01', 13, 'Q1 2030');
+		const paths = store.registryTaskChoices().map((c) => c.path);
+		expect(paths).toContain('Shared task / FE');
+		expect(paths).toContain('Solo task');
+		// From an earlier period they lie in the future — not offered.
+		store.switchToPeriod('2020-01-01', 13, 'Q1 2020');
+		expect(store.registryTaskChoices()).toEqual([]);
+	});
+
 	it('scheduleTasksAt queues remaining estimates at the drop date, skipping unestimated tasks', () => {
 		const store = makeStore();
 		// U is estimated at 4d with 2d already assigned (aU) — only the rest drops.
