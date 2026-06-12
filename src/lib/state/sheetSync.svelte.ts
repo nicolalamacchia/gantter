@@ -1,5 +1,6 @@
 import { quarterOf } from '$lib/engine/calendar';
 import { computeSchedule } from '$lib/engine/schedule';
+import { periodColor } from '$lib/export/labels';
 import { buildPeriodRequests } from '$lib/export/sheets';
 import {
 	createSpreadsheet,
@@ -161,7 +162,9 @@ export async function syncPlanToSheet(): Promise<string> {
 				p,
 				computeSchedule(p),
 				{ board: ids![titles.board], gantt: ids![titles.gantt] },
-				titles
+				titles,
+				// Both of a period's tabs wear the same stable color.
+				periodColor(p)
 			);
 		});
 		await spreadsheetBatchUpdate(spreadsheetId, requests);

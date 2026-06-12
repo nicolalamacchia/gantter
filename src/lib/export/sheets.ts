@@ -229,7 +229,8 @@ function tabRequests(
 	sheetId: number,
 	title: string,
 	grid: RowData[],
-	frozen: { rows: number; cols: number }
+	frozen: { rows: number; cols: number },
+	tabColor?: string
 ): object[] {
 	const rowCount = Math.max(grid.length, frozen.rows + 1);
 	const columnCount = Math.max(...grid.map((r) => r.values.length), frozen.cols + 1);
@@ -239,6 +240,7 @@ function tabRequests(
 				properties: {
 					sheetId,
 					title,
+					...(tabColor ? { tabColorStyle: { rgbColor: hexToColor(tabColor) } } : {}),
 					gridProperties: {
 						rowCount,
 						columnCount,
@@ -246,7 +248,9 @@ function tabRequests(
 						frozenColumnCount: frozen.cols
 					}
 				},
-				fields: 'title,gridProperties(rowCount,columnCount,frozenRowCount,frozenColumnCount)'
+				fields:
+					'title,gridProperties(rowCount,columnCount,frozenRowCount,frozenColumnCount)' +
+					(tabColor ? ',tabColorStyle' : '')
 			}
 		},
 		{ unmergeCells: { range: { sheetId } } },
@@ -269,7 +273,8 @@ export function buildPeriodRequests(
 	plan: Plan,
 	schedule: Schedule,
 	ids: PeriodTabIds,
-	titles: { board: string; gantt: string }
+	titles: { board: string; gantt: string },
+	tabColor?: string
 ): object[] {
 	const columns = boardColumns(plan);
 	const rows = boardRows(plan);
@@ -277,7 +282,7 @@ export function buildPeriodRequests(
 	const legendCol = columns.length + 2;
 
 	const requests: object[] = [
-		...tabRequests(ids.board, titles.board, board, { rows: 2, cols: 1 }),
+		...tabRequests(ids.board, titles.board, board, { rows: 2, cols: 1 }, tabColor),
 		...colWidths(ids.board, [
 			{ from: 0, to: 1, px: 80 },
 			{ from: 1, to: columns.length + 1, px: 190 },
@@ -309,10 +314,13 @@ export function buildPeriodRequests(
 	}
 
 	requests.push(
-		...tabRequests(ids.gantt, titles.gantt, ganttGrid(plan, schedule, rows), {
-			rows: 1,
-			cols: 1
-		}),
+		...tabRequests(
+			ids.gantt,
+			titles.gantt,
+			ganttGrid(plan, schedule, rows),
+			{ rows: 1, cols: 1 },
+			tabColor
+		),
 		...colWidths(ids.gantt, [
 			{ from: 0, to: 1, px: 320 },
 			{ from: 1, to: rows.length + 1, px: 24 }

@@ -36,6 +36,7 @@ interface RequestShape {
 		properties: {
 			sheetId: number;
 			title: string;
+			tabColorStyle?: { rgbColor: { red: number; green: number; blue: number } };
 			gridProperties: { frozenRowCount: number; rowCount: number };
 		};
 	};
@@ -52,7 +53,8 @@ function build(plan: Plan = fixture()): RequestShape[] {
 		plan,
 		computeSchedule(plan),
 		{ board: 4, gantt: 5 },
-		{ board: 'Q1 2026', gantt: 'Q1 2026 Gantt' }
+		{ board: 'Q1 2026', gantt: 'Q1 2026 Gantt' },
+		'#e6194b'
 	) as RequestShape[];
 }
 
@@ -77,6 +79,8 @@ describe('Google Sheets export', () => {
 				.updateSheetProperties!.properties;
 			expect(props.title).toBe(title);
 			expect(props.gridProperties.frozenRowCount).toBe(frozen);
+			// Both tabs of a period wear the same tab color.
+			expect(props.tabColorStyle?.rgbColor).toEqual(hexToColor('#e6194b'));
 			// The clear (range, no rows) must precede the data write (start + rows).
 			const clearIdx = reqs.findIndex(
 				(r) => r.updateCells?.range?.sheetId === sheetId && !r.updateCells.rows

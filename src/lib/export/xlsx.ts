@@ -4,7 +4,7 @@ import { addDays, formatDay, formatMonthDay } from '$lib/engine/calendar';
 import { computeSchedule } from '$lib/engine/schedule';
 import { bestTextOn } from '$lib/model/colors';
 import type { ISODate, Plan, Task } from '$lib/model/types';
-import { legendEntries, rootOf } from './labels';
+import { legendEntries, periodColor, rootOf } from './labels';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -42,9 +42,13 @@ export async function exportXlsx(plan: Plan): Promise<Blob> {
 	const wb = new ExcelJS.Workbook();
 	wb.creator = plan.name;
 
+	// All tabs of this period's workbook wear the same color, like the sheet mirror.
+	const tabProps = { tabColor: { argb: argb(periodColor(plan)) } };
+
 	// ---- Board sheet ----------------------------------------------------------
 	const board = wb.addWorksheet('Board', {
-		views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }]
+		views: [{ state: 'frozen', xSplit: 1, ySplit: 2 }],
+		properties: tabProps
 	});
 	board.getColumn(1).width = 11;
 	columns.forEach((_, i) => (board.getColumn(i + 2).width = 28));
@@ -146,7 +150,10 @@ export async function exportXlsx(plan: Plan): Promise<Blob> {
 	}
 
 	// ---- Gantt sheet --------------------------------------------------------------
-	const gantt = wb.addWorksheet('Gantt', { views: [{ state: 'frozen', xSplit: 1, ySplit: 1 }] });
+	const gantt = wb.addWorksheet('Gantt', {
+		views: [{ state: 'frozen', xSplit: 1, ySplit: 1 }],
+		properties: tabProps
+	});
 	gantt.getColumn(1).width = 46;
 	rows.forEach((_, i) => (gantt.getColumn(i + 2).width = 3.2));
 	const ganttHeader = gantt.getRow(1);
@@ -203,7 +210,7 @@ export async function exportXlsx(plan: Plan): Promise<Blob> {
 	for (const t of plan.tasks.filter((t) => !t.parentId)) addGanttRow(t, 0);
 
 	// ---- Tasks (WBS) sheet ------------------------------------------------------
-	const wbs = wb.addWorksheet('Tasks');
+	const wbs = wb.addWorksheet('Tasks', { properties: tabProps });
 	wbs.columns = [
 		{ header: 'Task', width: 46 },
 		{ header: 'Parent', width: 36 },
