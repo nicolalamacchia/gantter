@@ -229,6 +229,12 @@
 		}
 	}
 
+	/** The "Jira status: …" notes line that import/sync maintain for linked tasks. */
+	function jiraStatus(task: Task): string | null {
+		if (!task.jiraKey || !task.notes) return null;
+		return task.notes.match(/^Jira status: (.+)$/m)?.[1]?.trim() || null;
+	}
+
 	function statusText(task: Task): string {
 		const rollup = store.schedule.rollups[task.id];
 		const assigned = rollup?.assignedDays ?? 0;
@@ -364,6 +370,7 @@
 {/if}
 
 {#snippet taskRow(task: Task, isChild: boolean)}
+	{@const jstatus = jiraStatus(task)}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="row"
@@ -387,9 +394,13 @@
 					<span class="tag">{store.groupsById.get(task.groupId)?.name ?? '?'}</span>
 				{/if}
 			</span>
-			<span class="status" class:warn={hasWarning(task)} title={statusText(task)}>
-				{statusText(task)}{#if hasWarning(task)}<span class="warnmark" title={warnDetail(task)}
-						>&nbsp;⚠</span
+			<span
+				class="status"
+				class:warn={hasWarning(task)}
+				title={statusText(task) + (jstatus ? ` · Jira: ${jstatus}` : '')}
+			>
+				{statusText(task)}{#if jstatus}<span class="jstatus">&nbsp;· {jstatus}</span
+					>{/if}{#if hasWarning(task)}<span class="warnmark" title={warnDetail(task)}>&nbsp;⚠</span
 					>{/if}
 			</span>
 			{#if task.dependsOn?.length}
@@ -570,6 +581,10 @@
 	}
 	.status.warn {
 		color: var(--warn);
+	}
+	.jstatus {
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.deps {
 		font-size: 10px;
