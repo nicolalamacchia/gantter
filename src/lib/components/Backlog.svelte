@@ -2,6 +2,7 @@
 	import { formatMonthDay, periodEndOf } from '$lib/engine/calendar';
 	import { jiraIssueUrl } from '$lib/integrations/jira';
 	import type { Task } from '$lib/model/types';
+	import { jiraSync, runJiraPush, runJiraSync } from '$lib/state/jiraSync.svelte';
 	import { store } from '$lib/state/plan.svelte';
 	import { settings } from '$lib/state/settings.svelte';
 	import { ui } from '$lib/state/ui.svelte';
@@ -189,6 +190,33 @@
 		ui.backlogDropCell = null;
 	}
 
+	// ---- Jira pull / push for the whole period -----------------------------------
+
+	const hasLinked = $derived(store.plan.tasks.some((t) => t.jiraKey));
+	let syncMsg = $state('');
+
+	async function pullFromJira() {
+		syncMsg = '';
+		await runJiraSync();
+		syncMsg = jiraSync.lastOutcome;
+	}
+
+	async function pushToJira() {
+		const n = store.plan.tasks.filter((t) => t.jiraKey).length;
+		if (
+			!confirm(
+				`Push the board's data to Jira for ${n} linked task${n === 1 ? '' : 's'}? ` +
+					`Scheduled start/end dates overwrite the issues' date fields` +
+					(settings.jira.useStoryPoints ? ', and estimates overwrite their story points' : '') +
+					`. The board is the source of truth.`
+			)
+		) {
+			return;
+		}
+		syncMsg = '';
+		syncMsg = await runJiraPush();
+	}
+
 	function onTaskContextMenu(e: MouseEvent, taskId: string) {
 		e.preventDefault();
 		if (!ui.isHighlighted('task', taskId)) ui.selectTask(taskId);
@@ -267,6 +295,24 @@
 				>
 					⤓ Jira
 				</button>
+				{#if hasLinked && settings.jiraConfigured()}
+					<button
+						class="import"
+						disabled={jiraSync.busy}
+						onclick={pullFromJira}
+						title="Pull updated data from Jira for every linked task (names, status, colors; estimates fill only when empty)"
+					>
+						⇣ Pull
+					</button>
+					<button
+						class="import"
+						disabled={jiraSync.busy}
+						onclick={pushToJira}
+						title="Push scheduled start/end dates (and estimates as story points) to Jira for every linked task"
+					>
+						⇡ Push
+					</button>
+				{/if}
 				<button
 					class="collapse"
 					onclick={() => (ui.sidebarCollapsed = true)}
@@ -276,6 +322,11 @@
 				</button>
 			</span>
 		</header>
+		{#if syncMsg}
+			<div class="syncmsg" class:err={syncMsg.startsWith('✗') || syncMsg.startsWith('⚠')}>
+				{syncMsg}
+			</div>
+		{/if}
 		<ul>
 			{#each rows as { task, depth } (task.id)}
 				<li style:padding-left="{depth * 18}px">
@@ -428,8 +479,22 @@
 		cursor: pointer;
 		white-space: nowrap;
 	}
-	.import:hover {
+	.import:hover:not(:disabled) {
 		background: var(--hover);
+	}
+	.import:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.syncmsg {
+		font-size: 11px;
+		color: var(--ok);
+		padding: 6px 12px;
+		border-bottom: 1px solid var(--border);
+		line-height: 1.4;
+	}
+	.syncmsg.err {
+		color: var(--danger);
 	}
 	ul {
 		list-style: none;

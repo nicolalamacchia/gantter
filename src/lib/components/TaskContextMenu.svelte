@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { addDays, periodEndOf, quarterOf, quartersAround, toISO } from '$lib/engine/calendar';
 	import { jiraIssueUrl } from '$lib/integrations/jira';
+	import type { Task } from '$lib/model/types';
 	import { clampToViewport } from './clampToViewport';
+	import { jiraSync, runJiraPush, runJiraSync } from '$lib/state/jiraSync.svelte';
 	import { store } from '$lib/state/plan.svelte';
 	import { settings } from '$lib/state/settings.svelte';
 	import { ui } from '$lib/state/ui.svelte';
@@ -15,6 +17,30 @@
 		const task = store.tasksById.get(selection[0]);
 		return task?.jiraKey && settings.jira.baseUrl ? task : null;
 	});
+
+	/** Linked tasks within the selection — pull/push targets. */
+	const linkedSelection = $derived(
+		selection.map((id) => store.tasksById.get(id)).filter((t): t is Task => !!t?.jiraKey)
+	);
+
+	async function pullSelection() {
+		const ids = linkedSelection.map((t) => t.id);
+		close();
+		await runJiraSync(ids);
+		alert(jiraSync.lastOutcome);
+	}
+
+	async function pushSelection() {
+		const ids = linkedSelection.map((t) => t.id);
+		const ok = confirm(
+			`Push the board's data to Jira for ${ids.length} linked task${ids.length === 1 ? '' : 's'}? ` +
+				`Scheduled start/end dates overwrite the issues' date fields` +
+				(settings.jira.useStoryPoints ? ', and estimates overwrite their story points' : '') +
+				`. The board is the source of truth.`
+		);
+		close();
+		if (ok) alert(await runJiraPush(ids));
+	}
 
 	let parentOpen = $state(false);
 	$effect(() => {
@@ -181,6 +207,22 @@
 				🔗 Open {jiraTask.jiraKey} in Jira
 			</button>
 		{/if}
+		{#if linkedSelection.length && settings.jiraConfigured()}
+			<button
+				disabled={jiraSync.busy}
+				title="Refresh the selected linked tasks from Jira (names, status, colors; estimates fill only when empty)"
+				onclick={pullSelection}
+			>
+				⇣ Pull from Jira{linkedSelection.length > 1 ? ` (${linkedSelection.length})` : ''}
+			</button>
+			<button
+				disabled={jiraSync.busy}
+				title="Write the selected tasks' scheduled start/end dates (and estimates as story points) to Jira"
+				onclick={pushSelection}
+			>
+				⇡ Push to Jira{linkedSelection.length > 1 ? ` (${linkedSelection.length})` : ''}
+			</button>
+		{/if}
 		{#if selection.length === 1}
 			<button
 				onclick={() => {
@@ -261,8 +303,12 @@
 		cursor: pointer;
 		color: var(--text);
 	}
-	button:hover {
+	button:hover:not(:disabled) {
 		background: var(--hover);
+	}
+	button:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 	button.danger {
 		color: var(--danger);

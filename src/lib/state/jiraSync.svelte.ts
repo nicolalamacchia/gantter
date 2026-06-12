@@ -1,9 +1,12 @@
 import {
 	buildJiraSyncUpdates,
 	detectEpicColorField,
+	ensureStartDateField,
 	ensureStoryPointsFields,
 	fetchChildrenStoryPointSum,
-	fetchIssuesByKeys
+	fetchIssuesByKeys,
+	pushIssueDates,
+	pushIssueEstimate
 } from '$lib/integrations/jira';
 import { store } from './plan.svelte';
 import { settings } from './settings.svelte';
@@ -23,9 +26,10 @@ export const jiraSync = new JiraSyncStore();
  * design (see buildJiraSyncUpdates): auto-generated names, the status note
  * and auto-assigned colors refresh; estimates are only filled when empty.
  */
-export async function runJiraSync(): Promise<void> {
+export async function runJiraSync(taskIds?: string[]): Promise<void> {
 	if (jiraSync.busy || !settings.jiraConfigured()) return;
-	const linked = store.plan.tasks.filter((t) => t.jiraKey);
+	const wanted = taskIds ? new Set(taskIds) : null;
+	const linked = store.plan.tasks.filter((t) => t.jiraKey && (!wanted || wanted.has(t.id)));
 	if (!linked.length) {
 		jiraSync.lastOutcome = 'No Jira-linked tasks in this period';
 		return;
@@ -75,6 +79,74 @@ export async function runJiraSync(): Promise<void> {
 			` (${issues.length}/${linked.length} issues checked)`;
 	} catch (e) {
 		jiraSync.lastOutcome = `✗ ${e instanceof Error ? e.message : 'Sync failed'}`;
+	} finally {
+		jiraSync.busy = false;
+	}
+}
+
+/**
+ * Pushes the board's data for the given linked tasks (or every linked task in
+ * the plan) back to Jira: each task's scheduled start/end dates and — when
+ * story points are enabled — its estimate as story points. One way, the board
+ * is the source of truth. Returns a summary line.
+ */
+export async function runJiraPush(taskIds?: string[]): Promise<string> {
+	if (jiraSync.busy) return 'A Jira operation is already running';
+	if (!settings.jiraConfigured()) return '✗ Configure Jira in Settings first';
+	const wanted = taskIds ? new Set(taskIds) : null;
+	const linked = store.plan.tasks.filter((t) => t.jiraKey && (!wanted || wanted.has(t.id)));
+	if (!linked.length) return '✗ No Jira-linked tasks to push';
+	jiraSync.busy = true;
+	try {
+		const startField = await ensureStartDateField(settings.jira, (fieldId) =>
+			settings.updateJira({ startDateField: fieldId })
+		).catch(() => null);
+		let spFields: string[] = [];
+		if (settings.jira.useStoryPoints) {
+			spFields = await ensureStoryPointsFields(settings.jira, (ids) =>
+				settings.updateJira({ storyPointsField: ids })
+			).catch(() => []);
+		}
+		let dates = 0;
+		let estimates = 0;
+		const failures: string[] = [];
+		for (const task of linked) {
+			const rollup = store.schedule.rollups[task.id];
+			try {
+				if (rollup?.startDate && rollup.endDate) {
+					await pushIssueDates(settings.jira, task.jiraKey!, {
+						startDate: rollup.startDate,
+						endDate: rollup.endDate,
+						startDateField: startField
+					});
+					dates++;
+				}
+				if (spFields.length && task.estimateDays != null) {
+					await pushIssueEstimate(
+						settings.jira,
+						task.jiraKey!,
+						Math.round(task.estimateDays),
+						spFields
+					);
+					estimates++;
+				}
+			} catch (e) {
+				failures.push(`${task.jiraKey}: ${e instanceof Error ? e.message : 'failed'}`);
+			}
+		}
+		const parts = [`${dates} date range${dates === 1 ? '' : 's'}`];
+		if (spFields.length) parts.push(`${estimates} estimate${estimates === 1 ? '' : 's'}`);
+		const summary =
+			(failures.length ? '⚠' : '✓') +
+			` Pushed ${parts.join(' and ')} to Jira` +
+			(startField ? '' : ' (no "Start date" field on this site — only due dates set)') +
+			(failures.length ? ` · ✗ ${failures.join(' · ')}` : '');
+		jiraSync.lastOutcome = summary;
+		return summary;
+	} catch (e) {
+		const message = `✗ ${e instanceof Error ? e.message : 'Push failed'}`;
+		jiraSync.lastOutcome = message;
+		return message;
 	} finally {
 		jiraSync.busy = false;
 	}

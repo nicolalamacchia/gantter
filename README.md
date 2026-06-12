@@ -129,6 +129,11 @@ stay with the user.
    “KEY · summary” names, the “Jira status” note and epic colors update (custom names, colors
    and other notes are kept), and story points fill _empty_ estimates. Existing estimates never
    change automatically; “Check estimates from Jira” remains the review flow for those.
+6. Whenever the period has Jira-linked tasks, the task list header grows **⇣ Pull** and
+   **⇡ Push** buttons: Pull refreshes every linked task (same conservative rules as auto-sync),
+   Push writes each task's scheduled start/end dates — and, with story points enabled, its
+   estimate as story points — onto the issues (one way, the board is the source of truth, after
+   a confirm). The same actions live in the right-click menu, scoped to the selected tasks.
 
 The task list itself can be collapsed (◂ in its header) and resized by dragging its right edge.
 

@@ -357,6 +357,31 @@ export async function pushIssueDates(
 	await jiraPut(cfg, `api/3/issue/${encodeURIComponent(key.trim())}`, { fields });
 }
 
+/**
+ * Writes the task's estimate back as story points (1 person-day = 1 SP).
+ * Candidate fields are tried in order — sites have different writable ones
+ * per project type, and writing the wrong one is a 400.
+ */
+export async function pushIssueEstimate(
+	cfg: JiraSettings,
+	key: string,
+	storyPoints: number,
+	fieldIds: string[]
+): Promise<void> {
+	let lastError: unknown = new Error('No story-points field to write');
+	for (const fieldId of fieldIds) {
+		try {
+			await jiraPut(cfg, `api/3/issue/${encodeURIComponent(key.trim())}`, {
+				fields: { [fieldId]: storyPoints }
+			});
+			return;
+		} catch (e) {
+			lastError = e;
+		}
+	}
+	throw lastError;
+}
+
 /** Sum of the children's story points (epic → its issues). */
 export async function fetchChildrenStoryPointSum(
 	cfg: JiraSettings,
