@@ -42,6 +42,8 @@
 		groupId = t.groupId ?? '';
 		estimate = t.estimateDays ?? null;
 		jiraKey = t.jiraKey ?? '';
+		if (jiraKey) void loadChildren(jiraKey);
+		else resetChildren();
 	}
 
 	const editing = $derived(
@@ -61,6 +63,8 @@
 		jiraKey = t?.jiraKey ?? '';
 		jiraLookup = '';
 		continueId = '';
+		inheritChildColors = true;
+		resetChildren();
 	});
 
 	let jiraSuggestions = $state<JiraIssue[]>([]);
@@ -70,6 +74,7 @@
 
 	function onJiraInput() {
 		jiraLookup = '';
+		resetChildren();
 		clearTimeout(jiraTimer);
 		const query = jiraKey.trim();
 		if (query.length < 2 || !settings.jiraConfigured()) {
@@ -79,6 +84,8 @@
 		}
 		const req = ++jiraReq;
 		jiraTimer = setTimeout(async () => {
+			// A pasted/typed-out key never goes through pickJira — fetch its children here.
+			if (JIRA_KEY_RE.test(query)) void loadChildren(query);
 			try {
 				const issues = await jiraPickIssues(settings.jira, query);
 				if (req !== jiraReq) return;
@@ -93,6 +100,10 @@
 	}
 
 	function pickJira(issue: JiraIssue) {
+		// A pending debounced lookup must not fire after the pick — it would
+		// cancel this issue's children fetch in favor of the half-typed key.
+		clearTimeout(jiraTimer);
+		jiraReq++;
 		jiraKey = issue.key;
 		if (!name.trim()) name = `${issue.key} · ${issue.summary}`;
 		jiraLookup = `✓ ${issue.key}: ${issue.summary}`;
@@ -100,6 +111,99 @@
 		jiraSuggestions = [];
 		void fillEstimateFromStoryPoints(issue.key);
 		void fillColorFromJira(issue.key);
+		void loadChildren(issue.key);
+	}
+
+	// ---- child work items: fetched when a Jira issue is set, reviewed before import ----
+
+	const JIRA_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+	let childIssues = $state<JiraIssue[]>([]);
+	/** key → import it; "Create" imports only the checked ones. */
+	let childSel = $state<Record<string, boolean>>({});
+	let childrenBusy = $state(false);
+	let inheritChildColors = $state(true);
+	/** Pin the estimate to Jira's full total instead of following the selection. */
+	let keepOriginalEstimate = $state(false);
+	/** The issue's own total from Jira (own SP, epics summing all children), in days. */
+	let jiraTotalDays = $state<number | null>(null);
+	let childReq = 0;
+
+	/** Keys already linked in this plan — shown in the list but not importable again. */
+	const linkedKeys = $derived(
+		new Set(store.plan.tasks.filter((t) => t.jiraKey).map((t) => t.jiraKey!))
+	);
+	const childSelectedCount = $derived(childIssues.filter((c) => childSel[c.key]).length);
+
+	/** The original total in days: Jira's own number, else the sum over ALL children. */
+	const jiraFullTotal = $derived.by(() => {
+		if (jiraTotalDays) return jiraTotalDays;
+		const sum = childIssues.reduce((s, c) => s + (c.storyPoints ?? 0), 0);
+		return sum > 0 ? storyPointsToDays(sum) : null;
+	});
+	/** Sum of the checked children's story points, in days. */
+	const childSelectedDays = $derived.by(() => {
+		const sum = childIssues.reduce((s, c) => s + (childSel[c.key] ? (c.storyPoints ?? 0) : 0), 0);
+		return sum > 0 ? storyPointsToDays(sum) : null;
+	});
+
+	const childrenHaveSP = $derived(childIssues.some((c) => c.storyPoints));
+
+	/** The estimate follows the selection — unless pinned to Jira's original total. */
+	function applyEstimateFromChildren() {
+		if (!childrenHaveSP) return; // children carry no points — nothing to derive
+		estimate = keepOriginalEstimate ? jiraFullTotal : childSelectedDays;
+	}
+
+	function toggleChild(key: string) {
+		childSel[key] = !childSel[key];
+		applyEstimateFromChildren();
+	}
+
+	function resetChildren() {
+		childReq++;
+		childIssues = [];
+		childSel = {};
+		childrenBusy = false;
+		keepOriginalEstimate = false;
+		jiraTotalDays = null;
+	}
+
+	/** Fetches the issue's child work items, pre-selecting the ones not in the plan yet. */
+	async function loadChildren(key: string) {
+		resetChildren();
+		if (editing || !key || !settings.jiraConfigured()) return;
+		const req = ++childReq;
+		childrenBusy = true;
+		try {
+			let spFields: string[] = [];
+			if (settings.jira.useStoryPoints) {
+				spFields = await ensureStoryPointsFields(settings.jira, (ids) =>
+					settings.updateJira({ storyPointsField: ids })
+				).catch(() => []);
+			}
+			const colorField = await detectEpicColorField(settings.jira);
+			const children = await fetchChildIssues(settings.jira, key, {
+				storyPointsFields: spFields,
+				epicColorField: colorField
+			});
+			if (req !== childReq || jiraKey.trim() !== key) return;
+			childIssues = children;
+			childSel = Object.fromEntries(
+				children.filter((c) => !linkedKeys.has(c.key)).map((c) => [c.key, true])
+			);
+			applyEstimateFromChildren();
+		} catch {
+			// no children or Jira unreachable — nothing to review
+		} finally {
+			if (req === childReq) childrenBusy = false;
+		}
+	}
+
+	function setAllChildren(value: boolean) {
+		childSel = Object.fromEntries(
+			childIssues.filter((c) => !linkedKeys.has(c.key)).map((c) => [c.key, value])
+		);
+		applyEstimateFromChildren();
 	}
 
 	/** Epics carry a color in Jira — adopt it so the board matches the Jira board. */
@@ -126,6 +230,7 @@
 			const sp = await fetchStoryPoints(settings.jira, key, fieldIds);
 			if (sp && jiraKey === key) {
 				const proposed = storyPointsToDays(sp);
+				jiraTotalDays = proposed;
 				if (estimate == null) {
 					estimate = proposed;
 					jiraLookup += ` · ${sp} SP → ${proposed}d`;
@@ -214,12 +319,26 @@
 			store.updateTask(editing.id, fields);
 		} else {
 			store.addTask(fields, continueId || undefined);
-			// Creating a task from a Jira issue also brings in its child work items.
-			if (fields.jiraKey) void importChildWorkItems(fields.jiraKey);
+			if (fields.jiraKey) {
+				if (childrenBusy) {
+					// The child fetch hasn't landed yet — keep the default and import them all.
+					void importChildWorkItems(fields.jiraKey);
+				} else if (childSelectedCount) {
+					// The parent task is in the plan by now — children attach to it by key.
+					store.addTasks(
+						issuesToTasks(
+							childIssues.filter((c) => childSel[c.key]),
+							store.plan.tasks,
+							{ inheritParentColor: inheritChildColors }
+						)
+					);
+				}
+			}
 		}
 		close();
 	}
 
+	/** Fallback when "Create" lands before the children list finished loading. */
 	async function importChildWorkItems(key: string) {
 		if (!settings.jiraConfigured()) return;
 		try {
@@ -362,6 +481,55 @@
 				<span class="lookup" class:err={jiraLookup.startsWith('✗')}>{jiraLookup}</span>
 			{/if}
 		</div>
+		{#if !editing && (childrenBusy || childIssues.length)}
+			<div class="field">
+				<span class="children-head">
+					Child work items
+					{#if childrenBusy}
+						<em>fetching…</em>
+					{:else}
+						<em>{childSelectedCount} of {childIssues.length} selected</em>
+						<button type="button" class="mini" onclick={() => setAllChildren(true)}>All</button>
+						<button type="button" class="mini" onclick={() => setAllChildren(false)}>None</button>
+					{/if}
+				</span>
+				{#if childIssues.length}
+					<div class="deps">
+						{#each childIssues as c (c.key)}
+							<label class="dep">
+								<input
+									type="checkbox"
+									checked={!!childSel[c.key]}
+									disabled={linkedKeys.has(c.key)}
+									onchange={() => toggleChild(c.key)}
+								/>
+								<strong>{c.key}</strong>
+								<span class="child-summary">{c.summary}</span>
+								{#if linkedKeys.has(c.key)}
+									<em>already in plan</em>
+								{:else if c.storyPoints}
+									<em>{c.storyPoints} SP</em>
+								{/if}
+							</label>
+						{/each}
+					</div>
+					<label class="check">
+						<input type="checkbox" bind:checked={inheritChildColors} />
+						Children inherit this task's color
+					</label>
+					{#if childrenHaveSP}
+						<label class="check">
+							<input
+								type="checkbox"
+								bind:checked={keepOriginalEstimate}
+								onchange={applyEstimateFromChildren}
+							/>
+							Keep the original total ({jiraFullTotal}d) as this task's estimate
+						</label>
+					{/if}
+				{/if}
+			</div>
+		{/if}
 		{#if depOptions.length}
 			<div class="field">
 				<span>Depends on (must finish first)</span>
@@ -452,6 +620,53 @@
 		border-radius: 3px;
 		flex: none;
 		border: 1px solid rgba(0, 0, 0, 0.1);
+	}
+	.children-head {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+	}
+	.children-head em,
+	.dep em {
+		font-weight: 400;
+		font-style: normal;
+		font-size: 11.5px;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	.mini {
+		font: inherit;
+		font-size: 11px;
+		font-weight: 600;
+		padding: 0 4px;
+		border: none;
+		background: none;
+		color: var(--accent);
+		cursor: pointer;
+	}
+	.mini:hover {
+		text-decoration: underline;
+	}
+	.dep strong {
+		color: var(--accent);
+		flex: none;
+	}
+	.child-summary {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.dep:has(input:disabled) {
+		opacity: 0.55;
+	}
+	.check {
+		flex-direction: row;
+		align-items: center;
+		gap: 7px;
+		font-weight: 500;
+	}
+	.check input {
+		width: auto;
 	}
 	.jira-box {
 		position: relative;

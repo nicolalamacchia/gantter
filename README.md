@@ -111,8 +111,11 @@ stay with the user.
    and pick from the live autocomplete (selecting fills the task name) — or bulk-import tasks
    with a JQL query via **⤓ Jira** next to “＋ New task” (also reachable from Settings). Both
    ways, the issue's child work items come along as child tasks carrying their own story-point
-   estimates (a checkbox in the import dialog controls whether they inherit the parent's color —
-   on by default). Linked tasks are marked everywhere: a key chip in the sidebar and the Gantt (opening the issue), a 🔗
+   estimates — in the task editor they appear as a pre-checked review list (All/None; pick the
+   ones to import, already-linked ones are skipped) before you hit Create; a checkbox controls
+   whether they inherit the parent's color (on by default). The task's estimate follows the
+   selected children's story points; a second checkbox (off by default) keeps Jira's original
+   total instead, even when only a subset is imported. Linked tasks are marked everywhere: a key chip in the sidebar and the Gantt (opening the issue), a 🔗
    on their board blocks, and a link in the block popover. When the site exposes epic colors,
    linked and imported tasks adopt them as task colors.
 4. Optionally enable **Use story points as estimates** (1 SP = 1 person-day): linking and
