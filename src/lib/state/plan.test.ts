@@ -476,6 +476,20 @@ describe('PlanStore commands', () => {
 		expect(store.subtreeEstimate('P')).toBe(13);
 	});
 
+	it('autoEstimate parents track their children on every commit', () => {
+		const store = makeStore();
+		store.addTask({ name: 'P', color: '#111', autoEstimate: true }, 'P');
+		store.addTask({ name: 'A', color: '#111', parentId: 'P', estimateDays: 3 }, 'A');
+		expect(store.tasksById.get('P')?.estimateDays).toBe(3);
+		store.updateTask('A', { estimateDays: 5 });
+		expect(store.tasksById.get('P')?.estimateDays).toBe(5);
+		store.addTask({ name: 'B', color: '#111', parentId: 'P', estimateDays: 2 }, 'B');
+		expect(store.tasksById.get('P')?.estimateDays).toBe(7);
+		// Removing the last estimated child clears the rollup instead of pinning 0.
+		store.removeTasks(['A', 'B']);
+		expect(store.tasksById.get('P')?.estimateDays).toBeUndefined();
+	});
+
 	it('registryTaskChoices offers only tasks from previous periods, with full paths', () => {
 		const store = makeStore(); // active period starts 2026-01-05
 		store.addTask({ name: 'FE', color: '#abc', parentId: 'T' }, 'T-FE');

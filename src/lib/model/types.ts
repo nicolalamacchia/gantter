@@ -29,6 +29,8 @@ export interface Task {
 	parentId?: string;
 	groupId?: string;
 	estimateDays?: number;
+	/** Keep estimateDays equal to the children's rollup, recomputed on every commit. */
+	autoEstimate?: boolean;
 	notes?: string;
 	/**
 	 * Task ids that must fully finish (including all their workstreams) before

@@ -22,6 +22,7 @@
 	let parentId = $state('');
 	let groupId = $state('');
 	let estimate = $state<number | null>(null);
+	let autoEstimate = $state(false);
 	let notes = $state('');
 	let dependsOn = $state<string[]>([]);
 	let jiraKey = $state('');
@@ -58,6 +59,7 @@
 		parentId = t?.parentId ?? ui.taskDialog.parentId ?? '';
 		groupId = t?.groupId ?? '';
 		estimate = t?.estimateDays ?? null;
+		autoEstimate = t?.autoEstimate ?? false;
 		notes = t?.notes ?? '';
 		dependsOn = t?.dependsOn ? [...t.dependsOn] : [];
 		jiraKey = t?.jiraKey ?? '';
@@ -404,6 +406,7 @@
 			parentId: parentId || undefined,
 			groupId: groupId || undefined,
 			estimateDays: estimate ?? undefined,
+			autoEstimate: autoEstimate || undefined,
 			notes: notes.trim() || undefined,
 			dependsOn: dependsOn.length ? [...dependsOn] : undefined,
 			jiraKey: jiraKey.trim() || undefined
@@ -538,17 +541,38 @@
 		<div class="field">
 			<span>Estimate (person-days)</span>
 			<div class="est-row">
-				<input type="number" min="1" bind:value={estimate} placeholder="optional" />
+				<input
+					type="number"
+					min="1"
+					bind:value={estimate}
+					placeholder="optional"
+					disabled={autoEstimate && childEstimateSum != null}
+				/>
 				{#if childEstimateSum != null}
-					<button
-						type="button"
-						class="est-sum"
-						class:stale={estimate !== childEstimateSum}
-						title="Set the estimate to the sum of the children's estimates"
-						onclick={() => (estimate = childEstimateSum)}
+					{#if !autoEstimate}
+						<button
+							type="button"
+							class="est-sum"
+							class:stale={estimate !== childEstimateSum}
+							title="Set the estimate to the sum of the children's estimates"
+							onclick={() => (estimate = childEstimateSum)}
+						>
+							Σ children = {childEstimateSum}d
+						</button>
+					{/if}
+					<label
+						class="check"
+						title="Keep the estimate equal to the children's rollup automatically, on every change"
 					>
-						Σ children = {childEstimateSum}d
-					</button>
+						<input
+							type="checkbox"
+							bind:checked={autoEstimate}
+							onchange={() => {
+								if (autoEstimate) estimate = childEstimateSum;
+							}}
+						/>
+						Auto
+					</label>
 				{/if}
 			</div>
 		</div>

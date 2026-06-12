@@ -51,6 +51,39 @@ function boot(): PlanBoot & { fresh: boolean } {
 	return { registry: { [demo.id]: demo }, active: demo, fresh: true };
 }
 
+/**
+ * Parents flagged autoEstimate keep their estimate equal to their children's
+ * rollup (a child's own estimate wins over its subtree; nested auto parents
+ * resolve bottom-up). Applied after every commit, like the merge invariant.
+ */
+function applyAutoEstimates(plan: Plan) {
+	const childrenOf = new Map<string, Task[]>();
+	for (const t of plan.tasks) {
+		if (!t.parentId) continue;
+		const list = childrenOf.get(t.parentId) ?? [];
+		list.push(t);
+		childrenOf.set(t.parentId, list);
+	}
+	const memo = new Map<string, number>();
+	const effective = (t: Task): number => {
+		const cached = memo.get(t.id);
+		if (cached !== undefined) return cached;
+		memo.set(t.id, 0); // guards against malformed parent cycles
+		const children = childrenOf.get(t.id) ?? [];
+		const sum = children.reduce((s, c) => s + effective(c), 0);
+		// Auto tasks never contribute their stored value — it is derived data.
+		const value = t.autoEstimate ? sum : t.estimateDays != null ? Math.round(t.estimateDays) : sum;
+		memo.set(t.id, value);
+		return value;
+	};
+	for (const t of plan.tasks) {
+		if (!t.autoEstimate) continue;
+		const sum = effective(t);
+		// Losing the last estimated child clears the rollup instead of pinning it.
+		t.estimateDays = sum > 0 ? sum : undefined;
+	}
+}
+
 export class PlanStore {
 	#boot = boot();
 	/** All plans, one per period; the active one is mirrored here on every change. */
@@ -102,6 +135,8 @@ export class PlanStore {
 		this.plan.assignments = mergeAdjacentChunks(
 			$state.snapshot(this.plan.assignments) as Assignment[]
 		);
+		// Invariant: auto-estimate parents track their children's rollup.
+		applyAutoEstimates(this.plan);
 		this.#afterChange();
 	}
 
