@@ -800,6 +800,15 @@ export class PlanStore {
 		});
 	}
 
+	/** Estimate rollup over a subtree: a task's own estimate wins, else its children's sum. */
+	subtreeEstimate(taskId: string): number {
+		const task = this.tasksById.get(taskId);
+		if (!task) return 0;
+		if (task.estimateDays != null) return Math.round(task.estimateDays);
+		const children = this.childrenByParent.get(taskId) ?? [];
+		return children.reduce((sum, c) => sum + this.subtreeEstimate(c.id), 0);
+	}
+
 	/** Estimate days not yet covered by this task's own assignments (0 without an estimate). */
 	remainingEstimate(taskId: string): number {
 		const estimate = this.tasksById.get(taskId)?.estimateDays;

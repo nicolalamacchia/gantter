@@ -465,6 +465,17 @@ describe('PlanStore commands', () => {
 		expect(store.plan.tasks.find((t) => t.id === 'B')?.parentId).toBe('A');
 	});
 
+	it("subtreeEstimate rolls up children, preferring a task's own estimate", () => {
+		const store = makeStore();
+		store.addTask({ name: 'P', color: '#111' }, 'P');
+		store.addTask({ name: 'A', color: '#111', parentId: 'P', estimateDays: 3 }, 'A');
+		store.addTask({ name: 'B', color: '#111', parentId: 'P' }, 'B');
+		store.addTask({ name: 'C', color: '#111', parentId: 'B', estimateDays: 2 }, 'C');
+		expect(store.subtreeEstimate('P')).toBe(5); // A(3) + B→C(2)
+		store.updateTask('B', { estimateDays: 10 }); // an own estimate beats the child sum
+		expect(store.subtreeEstimate('P')).toBe(13);
+	});
+
 	it('registryTaskChoices offers only tasks from previous periods, with full paths', () => {
 		const store = makeStore(); // active period starts 2026-01-05
 		store.addTask({ name: 'FE', color: '#abc', parentId: 'T' }, 'T-FE');

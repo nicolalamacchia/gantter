@@ -325,6 +325,18 @@
 		}
 	}
 
+	/**
+	 * Sum of the edited task's children's estimate rollups — what its own
+	 * estimate should be after the children's sizes changed. Null when there is
+	 * nothing to derive (new task, no children, or all children unestimated).
+	 */
+	const childEstimateSum = $derived.by(() => {
+		if (!editing) return null;
+		const children = store.childrenByParent.get(editing.id) ?? [];
+		const sum = children.reduce((s, c) => s + store.subtreeEstimate(c.id), 0);
+		return sum > 0 ? sum : null;
+	});
+
 	/** Tasks that may serve as parent: anything except the edited task and its subtree. */
 	const parentOptions = $derived.by(() => {
 		const excluded = new Set<string>();
@@ -523,10 +535,23 @@
 				</select>
 			</label>
 		</div>
-		<label>
-			Estimate (person-days)
-			<input type="number" min="1" bind:value={estimate} placeholder="optional" />
-		</label>
+		<div class="field">
+			<span>Estimate (person-days)</span>
+			<div class="est-row">
+				<input type="number" min="1" bind:value={estimate} placeholder="optional" />
+				{#if childEstimateSum != null}
+					<button
+						type="button"
+						class="est-sum"
+						class:stale={estimate !== childEstimateSum}
+						title="Set the estimate to the sum of the children's estimates"
+						onclick={() => (estimate = childEstimateSum)}
+					>
+						Σ children = {childEstimateSum}d
+					</button>
+				{/if}
+			</div>
+		</div>
 		<div class="field">
 			<span>Jira issue</span>
 			<div class="jira-box">
@@ -711,6 +736,35 @@
 		border-radius: 3px;
 		flex: none;
 		border: 1px solid rgba(0, 0, 0, 0.1);
+	}
+	.est-row {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+	}
+	.est-row input {
+		flex: 1;
+		min-width: 0;
+	}
+	.est-sum {
+		font: inherit;
+		font-size: 11.5px;
+		font-weight: 600;
+		padding: 5px 9px;
+		border-radius: 6px;
+		border: 1px solid var(--border-strong);
+		background: var(--panel);
+		color: var(--text-mid);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.est-sum:hover {
+		background: var(--hover);
+	}
+	/* The children's sizes drifted from the stored estimate — nudge to refresh. */
+	.est-sum.stale {
+		color: var(--warn);
+		border-color: var(--warn);
 	}
 	.children-head {
 		display: flex;
