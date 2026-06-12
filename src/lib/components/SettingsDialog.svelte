@@ -10,6 +10,7 @@
 		type GoogleCalendarInfo
 	} from '$lib/integrations/google';
 	import {
+		ensureEndDateField,
 		ensureStartDateField,
 		ensureStoryPointsFields,
 		fetchStoryPoints,
@@ -272,6 +273,9 @@
 			const startField = await ensureStartDateField(settings.jira, (fieldId) =>
 				settings.updateJira({ startDateField: fieldId })
 			);
+			const endField = await ensureEndDateField(settings.jira, (fieldId) =>
+				settings.updateJira({ endDateField: fieldId })
+			);
 			let ok = 0;
 			const failures: string[] = [];
 			const pushed = new Set<string>();
@@ -280,7 +284,8 @@
 					await pushIssueDates(settings.jira, row.key, {
 						startDate: row.start,
 						endDate: row.end,
-						startDateField: startField
+						startDateField: startField,
+						endDateField: endField
 					});
 					ok++;
 					pushed.add(row.taskId);
@@ -291,7 +296,9 @@
 			dateProposals = dateProposals.filter((p) => !pushed.has(p.taskId));
 			datesStatus =
 				`✓ ${ok} issue${ok === 1 ? '' : 's'} updated` +
-				(startField ? '' : ' (no "Start date" field on this site — only due dates set)') +
+				(startField
+					? ''
+					: ' (no Target start/Start date field on this site — only end dates set)') +
 				(failures.length ? ` · ✗ ${failures.join(' · ')}` : '');
 		} catch (e) {
 			datesStatus = `✗ ${e instanceof Error ? e.message : 'Push failed'}`;

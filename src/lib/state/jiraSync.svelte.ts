@@ -1,6 +1,7 @@
 import {
 	buildJiraSyncUpdates,
 	detectEpicColorField,
+	ensureEndDateField,
 	ensureStartDateField,
 	ensureStoryPointsFields,
 	fetchChildrenStoryPointSum,
@@ -101,6 +102,9 @@ export async function runJiraPush(taskIds?: string[]): Promise<string> {
 		const startField = await ensureStartDateField(settings.jira, (fieldId) =>
 			settings.updateJira({ startDateField: fieldId })
 		).catch(() => null);
+		const endField = await ensureEndDateField(settings.jira, (fieldId) =>
+			settings.updateJira({ endDateField: fieldId })
+		).catch(() => null);
 		let spFields: string[] = [];
 		if (settings.jira.useStoryPoints) {
 			spFields = await ensureStoryPointsFields(settings.jira, (ids) =>
@@ -117,7 +121,8 @@ export async function runJiraPush(taskIds?: string[]): Promise<string> {
 					await pushIssueDates(settings.jira, task.jiraKey!, {
 						startDate: rollup.startDate,
 						endDate: rollup.endDate,
-						startDateField: startField
+						startDateField: startField,
+						endDateField: endField
 					});
 					dates++;
 				}
@@ -139,7 +144,7 @@ export async function runJiraPush(taskIds?: string[]): Promise<string> {
 		const summary =
 			(failures.length ? '⚠' : '✓') +
 			` Pushed ${parts.join(' and ')} to Jira` +
-			(startField ? '' : ' (no "Start date" field on this site — only due dates set)') +
+			(startField ? '' : ' (no Target start/Start date field on this site — only end dates set)') +
 			(failures.length ? ` · ✗ ${failures.join(' · ')}` : '');
 		jiraSync.lastOutcome = summary;
 		return summary;

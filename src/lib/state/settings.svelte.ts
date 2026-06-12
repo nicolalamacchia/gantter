@@ -18,8 +18,10 @@ export interface JiraSettings {
 	autoSync?: boolean;
 	/** Auto-detected story-points field ids, comma-separated (sites often have two). */
 	storyPointsField?: string;
-	/** Auto-detected custom field id holding the issue start date. */
+	/** Auto-detected custom field id holding the planned start (Target start / Start date). */
 	startDateField?: string;
+	/** Auto-detected custom field id holding the planned end (Target end); unset = due date. */
+	endDateField?: string;
 }
 
 export interface GoogleSettings {

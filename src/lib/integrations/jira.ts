@@ -331,28 +331,65 @@ export function storyPointsToDays(storyPoints: number): number {
 	return Math.max(1, Math.round(storyPoints));
 }
 
+/** Planned-start field: Advanced Roadmaps' "Target start" wins over plain "Start date". */
 export function pickStartDateField(fields: JiraField[]): string | null {
-	return fields.find((f) => f.id && /^start\s*date$/i.test(f.name ?? ''))?.id ?? null;
+	return (
+		fields.find((f) => f.id && /^target\s*start$/i.test(f.name ?? ''))?.id ??
+		fields.find((f) => f.id && /^start\s*date$/i.test(f.name ?? ''))?.id ??
+		null
+	);
 }
 
-/** Cached "Start date" field id; null when the site has none (then only due dates are pushed). */
+/** Planned-end field ("Target end"); null means the platform due date is written instead. */
+export function pickEndDateField(fields: JiraField[]): string | null {
+	return fields.find((f) => f.id && /^target\s*end$/i.test(f.name ?? ''))?.id ?? null;
+}
+
+/**
+ * Start-date field id, re-detected from the live field list each call (so a
+ * site gaining "Target start" wins over a previously cached "Start date");
+ * the settings cache only answers when the list cannot be fetched.
+ */
 export async function ensureStartDateField(
 	cfg: JiraSettings,
 	save: (fieldId: string) => void
 ): Promise<string | null> {
-	if (cfg.startDateField) return cfg.startDateField;
-	const fieldId = pickStartDateField(await listFields(cfg));
-	if (fieldId) save(fieldId);
-	return fieldId;
+	try {
+		const fieldId = pickStartDateField(await listFields(cfg));
+		if (fieldId && fieldId !== cfg.startDateField) save(fieldId);
+		return fieldId ?? cfg.startDateField ?? null;
+	} catch {
+		return cfg.startDateField ?? null;
+	}
 }
 
-/** Writes the schedule's dates onto the issue: due date + start date (board → Jira, one way). */
+/** End-date field id ("Target end"), same re-detect-with-cache-fallback contract. */
+export async function ensureEndDateField(
+	cfg: JiraSettings,
+	save: (fieldId: string) => void
+): Promise<string | null> {
+	try {
+		const fieldId = pickEndDateField(await listFields(cfg));
+		if (fieldId && fieldId !== cfg.endDateField) save(fieldId);
+		return fieldId ?? cfg.endDateField ?? null;
+	} catch {
+		return cfg.endDateField ?? null;
+	}
+}
+
+/** Writes the schedule's dates onto the issue (board → Jira, one way). */
 export async function pushIssueDates(
 	cfg: JiraSettings,
 	key: string,
-	dates: { startDate: string; endDate: string; startDateField?: string | null }
+	dates: {
+		startDate: string;
+		endDate: string;
+		startDateField?: string | null;
+		endDateField?: string | null;
+	}
 ): Promise<void> {
-	const fields: Record<string, unknown> = { duedate: dates.endDate };
+	// "Target end" when the site has it; the platform due date otherwise.
+	const fields: Record<string, unknown> = { [dates.endDateField ?? 'duedate']: dates.endDate };
 	if (dates.startDateField) fields[dates.startDateField] = dates.startDate;
 	await jiraPut(cfg, `api/3/issue/${encodeURIComponent(key.trim())}`, { fields });
 }

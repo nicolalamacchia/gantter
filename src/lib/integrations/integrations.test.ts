@@ -6,7 +6,9 @@ import {
 	buildJiraSyncUpdates,
 	issuesToTasks,
 	jiraColorToHex,
+	pickEndDateField,
 	pickEpicColorField,
+	pickStartDateField,
 	pickStoryPointsFields,
 	storyPointsToDays
 } from './jira';
@@ -133,6 +135,19 @@ describe('epic colors', () => {
 });
 
 describe('story points', () => {
+	it('prefers Target start/Target end for date pushes, with Start date / due date fallback', () => {
+		const fields = [
+			{ id: 'customfield_1', name: 'Start date' },
+			{ id: 'customfield_2', name: 'Target start' },
+			{ id: 'customfield_3', name: 'Target end' }
+		];
+		expect(pickStartDateField(fields)).toBe('customfield_2');
+		expect(pickEndDateField(fields)).toBe('customfield_3');
+		// Without the Roadmaps fields: plain Start date; no end field → due date is written.
+		expect(pickStartDateField([{ id: 'customfield_1', name: 'Start date' }])).toBe('customfield_1');
+		expect(pickEndDateField([{ id: 'customfield_1', name: 'Start date' }])).toBeNull();
+	});
+
 	it('collects ALL story-points candidates — sites often have two and either may hold the value', () => {
 		expect(
 			pickStoryPointsFields([
