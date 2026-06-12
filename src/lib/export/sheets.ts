@@ -3,6 +3,7 @@ import { addDays, formatDay, formatMonthDay } from '$lib/engine/calendar';
 import type { Schedule } from '$lib/engine/schedule';
 import { bestTextOn } from '$lib/model/colors';
 import type { ISODate, Plan, Task } from '$lib/model/types';
+import { legendEntries, rootOf } from './labels';
 
 /**
  * Pure builders for the Google Sheets `batchUpdate` that mirrors the Excel
@@ -44,11 +45,13 @@ interface CellOpts {
 
 function cell(value: string | number = '', opts: CellOpts = {}): CellData {
 	const data: CellData = {};
+	const format: Record<string, unknown> = {};
 	if (value !== '') {
 		data.userEnteredValue =
 			typeof value === 'number' ? { numberValue: value } : { stringValue: value };
+		// Long texts stay whole but never bleed into the neighboring column.
+		format.wrapStrategy = 'CLIP';
 	}
-	const format: Record<string, unknown> = {};
 	if (opts.bg) format.backgroundColor = hexToColor(opts.bg);
 	const text: Record<string, unknown> = {};
 	if (opts.fg) text.foregroundColor = hexToColor(opts.fg);
@@ -62,12 +65,6 @@ function cell(value: string | number = '', opts: CellOpts = {}): CellData {
 
 function header(value: string): CellData {
 	return cell(value, { bg: HEADER_GRAY, bold: true, size: 10, align: 'CENTER' });
-}
-
-function taskLabel(task: Task | undefined, tasksById: Map<string, Task>): string {
-	if (!task) return '?';
-	const parent = task.parentId ? tasksById.get(task.parentId) : undefined;
-	return parent ? `${parent.name} · ${task.name}` : task.name;
 }
 
 // ---- Board tab --------------------------------------------------------------------
@@ -85,14 +82,19 @@ function boardGrid(
 		for (let d = a.startDate; d <= a.endDate; d = addDays(d, 1)) byDay[d] = a.note ?? 'PTO';
 	}
 
+	const entries = legendEntries(plan);
 	const legend = (i: number): CellData => {
-		const task = plan.tasks[i];
-		if (!task) return cell();
-		return cell((task.parentId ? '    ' : '') + taskLabel(task, tasksById), {
-			bg: task.color,
-			fg: bestTextOn(task.color),
+		const entry = entries[i];
+		if (!entry) return cell();
+		return cell('    '.repeat(entry.depth) + entry.task.name, {
+			bg: entry.task.color,
+			fg: bestTextOn(entry.task.color),
 			size: 10
 		});
+	};
+	const legendEst = (i: number): CellData => {
+		const estimate = entries[i]?.task.estimateDays;
+		return estimate != null ? cell(estimate, { size: 10 }) : cell();
 	};
 
 	const groupRow: CellData[] = [header('')];
@@ -101,11 +103,11 @@ function boardGrid(
 		groupRow.push(header(c.groupName ?? ''));
 		memberRow.push(header(c.name));
 	}
-	groupRow.push(cell(), cell());
-	memberRow.push(cell(), cell('Task', { bold: true }));
+	groupRow.push(cell(), cell(), cell());
+	memberRow.push(cell(), cell('Task', { bold: true }), cell('Est. (d)', { bold: true, size: 9 }));
 	const grid: RowData[] = [{ values: groupRow }, { values: memberRow }];
 
-	const bodyRows = Math.max(rows.length, plan.tasks.length);
+	const bodyRows = Math.max(rows.length, entries.length);
 	for (let ri = 0; ri < bodyRows; ri++) {
 		const row = rows[ri];
 		const values: CellData[] = [];
@@ -136,11 +138,12 @@ function boardGrid(
 				}
 				const assignmentId = schedule.dayMap[col.memberId]?.[row.date];
 				if (assignmentId) {
+					// Board cells wear the TOPMOST parent's identity; the legend
+					// on the side carries the per-task breakdown.
 					const task = tasksById.get(schedule.placements[assignmentId].taskId);
-					const color = task?.color ?? '#cccccc';
-					values.push(
-						cell(taskLabel(task, tasksById), { bg: color, fg: bestTextOn(color), size: 9 })
-					);
+					const root = task ? rootOf(task, tasksById) : undefined;
+					const color = root?.color ?? '#cccccc';
+					values.push(cell(root?.name ?? '?', { bg: color, fg: bestTextOn(color), size: 9 }));
 				} else {
 					values.push(cell());
 				}
@@ -149,7 +152,7 @@ function boardGrid(
 			// The legend outgrew the timeline — pad the board side.
 			for (let i = 0; i <= columns.length; i++) values.push(cell());
 		}
-		values.push(cell(), legend(ri));
+		values.push(cell(), legend(ri), legendEst(ri));
 		grid.push({ values });
 	}
 	return grid;
@@ -279,7 +282,8 @@ export function buildPeriodRequests(
 			{ from: 0, to: 1, px: 80 },
 			{ from: 1, to: columns.length + 1, px: 190 },
 			{ from: columns.length + 1, to: legendCol, px: 24 },
-			{ from: legendCol, to: legendCol + 1, px: 340 }
+			{ from: legendCol, to: legendCol + 1, px: 340 },
+			{ from: legendCol + 1, to: legendCol + 2, px: 60 }
 		])
 	];
 	// Contiguous group spans merge in the group header row, like the Excel export.

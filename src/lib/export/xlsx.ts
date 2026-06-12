@@ -4,6 +4,7 @@ import { addDays, formatDay, formatMonthDay } from '$lib/engine/calendar';
 import { computeSchedule } from '$lib/engine/schedule';
 import { bestTextOn } from '$lib/model/colors';
 import type { ISODate, Plan, Task } from '$lib/model/types';
+import { legendEntries, rootOf } from './labels';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -23,12 +24,6 @@ function solid(hex: string): ExcelJS.Fill {
 /** Black-or-white font color readable on the given fill. */
 function fontOn(hex: string): { argb: string } {
 	return { argb: argb(bestTextOn(hex)) };
-}
-
-function taskLabel(task: Task | undefined, tasksById: Map<string, Task>): string {
-	if (!task) return '?';
-	const parent = task.parentId ? tasksById.get(task.parentId) : undefined;
-	return parent ? `${parent.name} · ${task.name}` : task.name;
 }
 
 /** Builds the people×days board (with colors, like the original sheet) plus a Tasks WBS sheet. */
@@ -55,6 +50,7 @@ export async function exportXlsx(plan: Plan): Promise<Blob> {
 	columns.forEach((_, i) => (board.getColumn(i + 2).width = 28));
 	const legendCol = columns.length + 3;
 	board.getColumn(legendCol).width = 52;
+	board.getColumn(legendCol + 1).width = 9;
 
 	const groupRow = board.getRow(1);
 	const memberRow = board.getRow(2);
@@ -108,31 +104,46 @@ export async function exportXlsx(plan: Plan): Promise<Blob> {
 				cell.fill = solid(ABSENCE_GRAY);
 				cell.value = absNote;
 				cell.font = { size: 8.5, color: { argb: 'FFF1F5F9' } };
+				cell.alignment = { wrapText: true };
 				continue;
 			}
 			const assignmentId = schedule.dayMap[col.memberId]?.[row.date];
 			if (assignmentId) {
+				// Board cells wear the TOPMOST parent's identity; the legend
+				// on the side carries the per-task breakdown.
 				const task = tasksById.get(schedule.placements[assignmentId].taskId);
-				const color = task?.color ?? '#cccccc';
-				cell.value = taskLabel(task, tasksById);
+				const root = task ? rootOf(task, tasksById) : undefined;
+				const color = root?.color ?? '#cccccc';
+				cell.value = root?.name ?? '?';
 				cell.fill = solid(color);
 				cell.font = { size: 9, color: fontOn(color) };
+				cell.alignment = { wrapText: true };
 			}
 		}
 		if (row.isHoliday) dateCell.fill = solid(HOLIDAY_GRAY);
 		if (row.isWeekend) dateCell.fill = solid(WEEKEND_GRAY);
 	});
 
-	// Task legend, like column M of the original sheet.
+	// Task legend (the breakdown), like column M of the original sheet.
 	const legendHeader = board.getCell(2, legendCol);
 	legendHeader.value = 'Task';
 	legendHeader.font = { bold: true };
-	plan.tasks.forEach((task, i) => {
+	const estHeader = board.getCell(2, legendCol + 1);
+	estHeader.value = 'Est. (d)';
+	estHeader.font = { bold: true, size: 9 };
+	const legend = legendEntries(plan);
+	legend.forEach(({ task, depth }, i) => {
 		const cell = board.getCell(3 + i, legendCol);
-		cell.value = (task.parentId ? '    ' : '') + taskLabel(task, tasksById);
+		cell.value = '    '.repeat(depth) + task.name;
 		cell.fill = solid(task.color);
 		cell.font = { size: 10, color: fontOn(task.color) };
+		cell.alignment = { wrapText: true };
+		if (task.estimateDays != null) board.getCell(3 + i, legendCol + 1).value = task.estimateDays;
 	});
+	// Fixed heights + wrapText = overflow is hidden without truncating the text.
+	for (let i = 0; i < Math.max(rows.length, legend.length); i++) {
+		board.getRow(3 + i).height = 13;
+	}
 
 	// ---- Gantt sheet --------------------------------------------------------------
 	const gantt = wb.addWorksheet('Gantt', { views: [{ state: 'frozen', xSplit: 1, ySplit: 1 }] });
@@ -170,10 +181,12 @@ export async function exportXlsx(plan: Plan): Promise<Blob> {
 	let ganttRowIdx = 2;
 	const addGanttRow = (task: Task, depth: number) => {
 		const r = gantt.getRow(ganttRowIdx++);
+		r.height = 13;
 		const nameCell = r.getCell(1);
 		nameCell.value = `${'    '.repeat(depth)}${task.name}`;
 		nameCell.fill = solid(task.color);
 		nameCell.font = { size: 10, color: fontOn(task.color) };
+		nameCell.alignment = { wrapText: true };
 		const active = new Set<ISODate>();
 		collectDays(task.id, active);
 		rows.forEach((row, i) => {
@@ -218,6 +231,8 @@ export async function exportXlsx(plan: Plan): Promise<Blob> {
 		]);
 		row.getCell(1).fill = solid(task.color);
 		row.getCell(1).font = { color: fontOn(task.color) };
+		row.getCell(1).alignment = { wrapText: true };
+		row.height = 14;
 	}
 
 	const buffer = await wb.xlsx.writeBuffer();

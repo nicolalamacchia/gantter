@@ -26,7 +26,10 @@ function fixture(): Plan {
 
 interface CellShape {
 	userEnteredValue?: { stringValue?: string; numberValue?: number };
-	userEnteredFormat?: { backgroundColor?: { red: number; green: number; blue: number } };
+	userEnteredFormat?: {
+		backgroundColor?: { red: number; green: number; blue: number };
+		wrapStrategy?: string;
+	};
 }
 interface RequestShape {
 	updateSheetProperties?: {
@@ -44,8 +47,7 @@ interface RequestShape {
 	mergeCells?: { range: { startColumnIndex: number; endColumnIndex: number } };
 }
 
-function build(): RequestShape[] {
-	const plan = fixture();
+function build(plan: Plan = fixture()): RequestShape[] {
 	return buildPeriodRequests(
 		plan,
 		computeSchedule(plan),
@@ -95,8 +97,29 @@ describe('Google Sheets export', () => {
 		expect(board[2].values[1].userEnteredFormat?.backgroundColor).toEqual(hexToColor('#2684ff'));
 		// Tue Jan 6 is a holiday — gray across members.
 		expect(board[3].values[1].userEnteredFormat?.backgroundColor).toEqual(hexToColor('#64748b'));
-		// Legend column carries the task name in its color.
+		// Legend column carries the task name in its color, the estimate beside it.
 		expect(board[2].values[4].userEnteredValue?.stringValue).toBe('Task');
+		expect(board[2].values[5].userEnteredValue?.numberValue).toBe(3);
+		// Texts clip instead of overflowing into the next column.
+		expect(board[2].values[1].userEnteredFormat?.wrapStrategy).toBe('CLIP');
+	});
+
+	it('board cells wear the topmost parent; the legend keeps the breakdown', () => {
+		const plan = fixture();
+		plan.tasks = [
+			{ id: 'T', name: 'Epic', color: '#2684ff', estimateDays: 5 },
+			{ id: 'C', name: 'Child', color: '#57d9a3', parentId: 'T', estimateDays: 2 }
+		];
+		plan.assignments = [{ id: 'a1', taskId: 'C', memberId: 'm1', days: 2, order: 0 }];
+		const board = dataRows(build(plan), 4);
+		// Mon Jan 5: work on the CHILD shows the epic's name and color on the board.
+		expect(board[2].values[1].userEnteredValue?.stringValue).toBe('Epic');
+		expect(board[2].values[1].userEnteredFormat?.backgroundColor).toEqual(hexToColor('#2684ff'));
+		// The legend breaks it down: the child sits indented, in its own color, with its estimate.
+		expect(board[2].values[4].userEnteredValue?.stringValue).toBe('Epic');
+		expect(board[3].values[4].userEnteredValue?.stringValue).toBe('    Child');
+		expect(board[3].values[4].userEnteredFormat?.backgroundColor).toEqual(hexToColor('#57d9a3'));
+		expect(board[3].values[5].userEnteredValue?.numberValue).toBe(2);
 	});
 
 	it('merges contiguous group spans in the header row', () => {
