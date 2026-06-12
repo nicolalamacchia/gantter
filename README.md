@@ -19,6 +19,16 @@ Data persists automatically in the browser (localStorage). Use **Data → Export
 portable JSON backup, and **Data → Export Excel** for the colored spreadsheet (imports cleanly
 into Google Sheets).
 
+### Run with Docker
+
+```sh
+docker compose up --build      # http://localhost:3000
+```
+
+The compose file passes optional `PUBLIC_*` defaults through from your shell or a local `.env`
+(see Integrations). Secrets like a Jira token belong in a mounted `gantter.config.json`, never
+in the image — the `.dockerignore` keeps them out of the build context too.
+
 ## Concepts
 
 - **Task** — unit of work with a color and an estimate in person-days. The editor offers 12

@@ -1,0 +1,28 @@
+services:
+  gantter:
+    build: .
+    image: gantter
+    ports:
+      - '3000:3000'
+    environment:
+      # Optional deploy-time defaults every visitor receives (README → Integrations).
+      # Values come from your shell or a local .env file next to this compose file.
+      PUBLIC_GOOGLE_CLIENT_ID: ${PUBLIC_GOOGLE_CLIENT_ID:-}
+      PUBLIC_JIRA_BASE_URL: ${PUBLIC_JIRA_BASE_URL:-}
+      PUBLIC_JIRA_EMAIL: ${PUBLIC_JIRA_EMAIL:-}
+      # PUBLIC_JIRA_TOKEN is deliberately NOT wired up: on a shared deployment it
+      # would hand your personal token to every visitor. For managed defaults,
+      # mount a server config instead:
+      # GANTTER_CONFIG: /config/gantter.config.json
+    # volumes:
+    #   - ./gantter.config.json:/config/gantter.config.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
