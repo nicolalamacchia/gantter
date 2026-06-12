@@ -685,6 +685,10 @@
 	}
 
 	function isDropTarget(memberId: string, date: ISODate): boolean {
+		// ⌥-drag from the task list shares the same highlight as internal drags.
+		if (ui.backlogDropCell) {
+			return ui.backlogDropCell.memberId === memberId && ui.backlogDropCell.date === date;
+		}
 		return (
 			(drag?.type === 'move' || drag?.type === 'move-absence') &&
 			drag.started &&

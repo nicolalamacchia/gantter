@@ -72,6 +72,10 @@
 		if (e.button !== 0) return;
 		// Hover actions and the Jira link keep their own clicks.
 		if ((e.target as HTMLElement).closest('.actions, a')) return;
+		if (e.altKey) {
+			startBoardDrag(e, taskId);
+			return;
+		}
 		dragSel = {
 			startId: taskId,
 			x: e.clientX,
@@ -112,6 +116,82 @@
 			setTimeout(() => (suppressClick = false), 0);
 		}
 		dragSel = null;
+	}
+
+	// ---- ⌥-drag to board: schedule estimated tasks at the drop cell --------------
+
+	let boardDrag = $state<{
+		/** Schedulable tasks only (estimate set, remaining days > 0), in visible order. */
+		taskIds: string[];
+		days: number;
+		skipped: number;
+		x: number;
+		y: number;
+		started: boolean;
+	} | null>(null);
+
+	function startBoardDrag(e: PointerEvent, taskId: string) {
+		const selection = ui.selectedTaskIds();
+		const dragged = selection.includes(taskId)
+			? visibleIds.filter((id) => selection.includes(id))
+			: [taskId];
+		const schedulable = dragged.filter((id) => store.remainingEstimate(id) > 0);
+		boardDrag = {
+			taskIds: schedulable,
+			days: schedulable.reduce((sum, id) => sum + store.remainingEstimate(id), 0),
+			skipped: dragged.length - schedulable.length,
+			x: e.clientX,
+			y: e.clientY,
+			started: false
+		};
+		window.addEventListener('pointermove', onBoardDragMove);
+		window.addEventListener('pointerup', onBoardDragEnd);
+		window.addEventListener('keydown', onBoardDragKey);
+	}
+
+	function cellUnder(e: PointerEvent): { memberId: string; date: string } | null {
+		const el = document
+			.elementFromPoint(e.clientX, e.clientY)
+			?.closest('[data-cell]') as HTMLElement | null;
+		const memberId = el?.dataset.member;
+		const date = el?.dataset.date;
+		return memberId && date ? { memberId, date } : null;
+	}
+
+	function onBoardDragMove(e: PointerEvent) {
+		if (!boardDrag) return;
+		if (!boardDrag.started) {
+			// The same few px of slack as drag-select, so ⌥-clicks stay clicks.
+			if (Math.abs(e.clientX - boardDrag.x) < 5 && Math.abs(e.clientY - boardDrag.y) < 5) return;
+			boardDrag.started = true;
+		}
+		boardDrag.x = e.clientX;
+		boardDrag.y = e.clientY;
+		ui.backlogDropCell = boardDrag.taskIds.length ? cellUnder(e) : null;
+	}
+
+	function onBoardDragEnd(e: PointerEvent) {
+		const drop = boardDrag?.started ? cellUnder(e) : null;
+		if (boardDrag?.started) {
+			suppressClick = true;
+			setTimeout(() => (suppressClick = false), 0);
+		}
+		if (drop && boardDrag?.taskIds.length) {
+			store.scheduleTasksAt(boardDrag.taskIds, drop.memberId, drop.date);
+		}
+		endBoardDrag();
+	}
+
+	function onBoardDragKey(e: KeyboardEvent) {
+		if (e.key === 'Escape') endBoardDrag();
+	}
+
+	function endBoardDrag() {
+		window.removeEventListener('pointermove', onBoardDragMove);
+		window.removeEventListener('pointerup', onBoardDragEnd);
+		window.removeEventListener('keydown', onBoardDragKey);
+		boardDrag = null;
+		ui.backlogDropCell = null;
 	}
 
 	function onTaskContextMenu(e: MouseEvent, taskId: string) {
@@ -226,6 +306,24 @@
 	</aside>
 {/if}
 
+{#if boardDrag?.started}
+	<div class="drag-ghost" style:left="{boardDrag.x + 12}px" style:top="{boardDrag.y + 14}px">
+		{#if boardDrag.taskIds.length}
+			<span>
+				{boardDrag.taskIds.length} task{boardDrag.taskIds.length === 1 ? '' : 's'} · {boardDrag.days}d
+				— drop on a member's column
+			</span>
+			{#if boardDrag.skipped}
+				<span class="skip">
+					{boardDrag.skipped} skipped — no estimate (or fully scheduled)
+				</span>
+			{/if}
+		{:else}
+			<span class="skip">Nothing to schedule — set an estimate first</span>
+		{/if}
+	</div>
+{/if}
+
 {#snippet taskRow(task: Task, isChild: boolean)}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
@@ -242,7 +340,7 @@
 			oncontextmenu={(e) => onTaskContextMenu(e, task.id)}
 			title="{store.taskPath(
 				task.id
-			)} · id {task.id} — click to spotlight (⌘ adds, ⇧ ranges); right-click for actions"
+			)} · id {task.id} — click to spotlight (⌘ adds, ⇧ ranges); right-click for actions; ⌥-drag onto the board to schedule (needs an estimate)"
 		>
 			<span class="name">
 				{task.name}
@@ -531,6 +629,28 @@
 	.rail button:hover {
 		background: var(--hover);
 		color: var(--text);
+	}
+	.drag-ghost {
+		position: fixed;
+		z-index: 100;
+		pointer-events: none;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		max-width: 280px;
+		padding: 5px 9px;
+		border-radius: 7px;
+		background: var(--panel);
+		box-shadow:
+			0 0 0 1px var(--border-strong),
+			0 8px 20px rgba(0, 0, 0, 0.22);
+		font-size: 11.5px;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.drag-ghost .skip {
+		font-weight: 500;
+		color: var(--warn);
 	}
 	.rail-label {
 		writing-mode: vertical-rl;

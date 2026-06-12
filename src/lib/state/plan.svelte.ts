@@ -8,6 +8,7 @@ import {
 } from '$lib/engine/calendar';
 import {
 	carveChunk,
+	dropNewAssignments,
 	mergeAdjacentChunks,
 	moveShare,
 	paintChunk,
@@ -784,6 +785,35 @@ export class PlanStore {
 				});
 			}
 		});
+	}
+
+	/** Estimate days not yet covered by this task's own assignments (0 without an estimate). */
+	remainingEstimate(taskId: string): number {
+		const estimate = this.tasksById.get(taskId)?.estimateDays;
+		if (!estimate) return 0;
+		const assigned = this.plan.assignments
+			.filter((a) => a.taskId === taskId)
+			.reduce((sum, a) => sum + a.days, 0);
+		return Math.max(0, Math.round(estimate) - assigned);
+	}
+
+	/**
+	 * Backlog drop: schedules tasks onto a member starting at the drop date,
+	 * each contributing its remaining estimate. Tasks without one (or already
+	 * fully assigned) are skipped. Returns how many were scheduled.
+	 */
+	scheduleTasksAt(taskIds: string[], memberId: string, targetDate: ISODate): number {
+		const items: Array<{ taskId: string; days: number }> = [];
+		for (const id of taskIds) {
+			const days = this.remainingEstimate(id);
+			if (days > 0) items.push({ taskId: id, days });
+		}
+		if (!items.length) return 0;
+		const assignments = dropNewAssignments(this.#moveContext(), memberId, items, targetDate);
+		this.#commit('scheduleTasksAt', (plan) => {
+			plan.assignments = assignments;
+		});
+		return items.length;
 	}
 
 	setAssignmentDays(id: string, days: number) {

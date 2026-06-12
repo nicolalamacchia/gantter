@@ -254,6 +254,35 @@ export function paintChunk(
 }
 
 /**
+ * Backlog drop: brand-new assignments (one per task) enter a member's queue
+ * so the first lands at the target date and the rest follow in order.
+ */
+export function dropNewAssignments(
+	ctx: MoveContext,
+	memberId: string,
+	items: Array<{ taskId: string; days: number }>,
+	targetDate: ISODate,
+	ids: string[] = items.map(() => newId())
+): Assignment[] {
+	if (!items.length) return ctx.plan.assignments.map((a) => ({ ...a }));
+	const orders = ordersFor(ctx, memberId, ids, targetDate);
+	const result: Assignment[] = ctx.plan.assignments.map((a) => {
+		const order = orders.get(a.id);
+		return order !== undefined ? { ...a, order } : { ...a };
+	});
+	items.forEach((item, i) => {
+		result.push({
+			id: ids[i],
+			taskId: item.taskId,
+			memberId,
+			days: item.days,
+			order: orders.get(ids[i])!
+		});
+	});
+	return result;
+}
+
+/**
  * Move an absence so the grabbed day lands on the drop cell, preserving its
  * working-day length (it rolls over weekends and holidays).
  */

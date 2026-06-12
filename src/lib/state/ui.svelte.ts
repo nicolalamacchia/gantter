@@ -38,6 +38,8 @@ export class UiStore {
 	contextMenu = $state<{ x: number; y: number; assignmentId?: string } | null>(null);
 	/** Task-paint mode: drag on the board to add chunks of this task (PTO-style). */
 	paintTask = $state<{ taskId: string } | null>(null);
+	/** ⌥-drag from the task list: the board cell under the cursor, highlighted by the grid. */
+	backlogDropCell = $state<{ memberId: string; date: string } | null>(null);
 
 	theme = $state<Theme>(loadTheme());
 

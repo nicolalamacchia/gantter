@@ -464,4 +464,29 @@ describe('PlanStore commands', () => {
 		expect(store.plan.tasks.find((t) => t.id === 'C')?.parentId).toBeUndefined();
 		expect(store.plan.tasks.find((t) => t.id === 'B')?.parentId).toBe('A');
 	});
+
+	it('scheduleTasksAt queues remaining estimates at the drop date, skipping unestimated tasks', () => {
+		const store = makeStore();
+		// U is estimated at 4d with 2d already assigned (aU) — only the rest drops.
+		store.updateTask('U', { estimateDays: 4 });
+		store.addTask({ name: 'Fresh', color: '#111', estimateDays: 3 }, 'N');
+
+		// T has no estimate — skipped; N and U land on m2 in the given order.
+		expect(store.scheduleTasksAt(['N', 'U', 'T'], 'm2', '2026-01-05')).toBe(2);
+
+		const n = store.plan.assignments.find((a) => a.taskId === 'N' && a.memberId === 'm2')!;
+		const u = store.plan.assignments.find((a) => a.taskId === 'U' && a.memberId === 'm2')!;
+		expect(u.days).toBe(2);
+		expect(store.schedule.placements[n.id].days).toEqual([
+			'2026-01-05',
+			'2026-01-06',
+			'2026-01-07'
+		]);
+		expect(store.schedule.placements[u.id].days).toEqual(['2026-01-08', '2026-01-09']);
+		// m2's existing share of T packs right after the dropped blocks.
+		expect(store.schedule.placements['aT2'].days[0]).toBe('2026-01-12');
+
+		// Fully covered estimates have nothing left to schedule.
+		expect(store.scheduleTasksAt(['N'], 'm1', '2026-01-05')).toBe(0);
+	});
 });
