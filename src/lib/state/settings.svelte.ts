@@ -27,6 +27,8 @@ export interface GoogleSettings {
 	clientId: string;
 	/** Calendar id whose events become company holidays (e.g. a shared holidays calendar). */
 	holidayCalendarId?: string;
+	/** Push the plan to its Google Sheet after every change (write-only). Off by default. */
+	sheetAutoSync?: boolean;
 }
 
 interface Settings {

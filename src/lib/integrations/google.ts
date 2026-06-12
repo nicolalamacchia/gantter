@@ -48,7 +48,7 @@ let authListener: ((signedIn: boolean) => void) | null = null;
 const AUTH_FLAG = 'gantter-google-auth';
 const TOKEN_KEY = 'gantter-google-token';
 const SCOPES =
-	'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/directory.readonly';
+	'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/directory.readonly https://www.googleapis.com/auth/spreadsheets';
 
 /** The UI mirrors auth state through this (module state isn't reactive). */
 export function setAuthListener(listener: (signedIn: boolean) => void) {
@@ -357,6 +357,81 @@ export async function fetchOutOfOffice(
 	return ((body.items ?? []) as RawEvent[])
 		.map(eventToOoo)
 		.filter((e): e is OooEvent => e !== null);
+}
+
+// ---- Google Sheets (write-only plan push) -----------------------------------------
+
+/** The stored spreadsheet was deleted (or access was lost) — recreate it. */
+export class SpreadsheetGoneError extends Error {}
+
+async function sheetsFetch(
+	path: string,
+	init: RequestInit,
+	what: string
+): Promise<Record<string, unknown>> {
+	if (!accessToken) throw new Error('Sign in with Google first');
+	const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets${path}`, {
+		...init,
+		headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+	});
+	if (res.status === 401) {
+		clearToken();
+		throw new Error('Google session expired — sign in again');
+	}
+	if (res.status === 404) throw new SpreadsheetGoneError('Spreadsheet no longer exists');
+	if (!res.ok) throw await googleApiError(res, what);
+	return res.json();
+}
+
+/** Creates a spreadsheet with the given tabs (sheetId = index) and returns its id. */
+export async function createSpreadsheet(title: string, sheetTitles: string[]): Promise<string> {
+	const body = await sheetsFetch(
+		'',
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				properties: { title },
+				sheets: sheetTitles.map((t, i) => ({ properties: { sheetId: i, title: t } }))
+			})
+		},
+		'Spreadsheet create'
+	);
+	const id = body.spreadsheetId;
+	if (typeof id !== 'string') throw new Error('Spreadsheet create returned no id');
+	return id;
+}
+
+/** Tab title → sheetId, also serving as the existence check (404 → SpreadsheetGoneError). */
+export async function getSheetIdsByTitle(spreadsheetId: string): Promise<Record<string, number>> {
+	const body = await sheetsFetch(
+		`/${spreadsheetId}?fields=sheets.properties(sheetId,title)`,
+		{ method: 'GET' },
+		'Spreadsheet read'
+	);
+	const out: Record<string, number> = {};
+	for (const sheet of (body.sheets ?? []) as Array<{
+		properties?: { sheetId?: number; title?: string };
+	}>) {
+		if (sheet.properties?.title !== undefined && sheet.properties.sheetId !== undefined) {
+			out[sheet.properties.title] = sheet.properties.sheetId;
+		}
+	}
+	return out;
+}
+
+export async function spreadsheetBatchUpdate(
+	spreadsheetId: string,
+	requests: object[]
+): Promise<void> {
+	await sheetsFetch(
+		`/${spreadsheetId}:batchUpdate`,
+		{ method: 'POST', body: JSON.stringify({ requests }) },
+		'Sheet update'
+	);
+}
+
+export function spreadsheetUrl(spreadsheetId: string): string {
+	return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
 }
 
 /** Maps fetched OOO events to absence facts for one member. */

@@ -8,6 +8,7 @@
 	import { trySilentSignIn } from '$lib/integrations/google';
 	import { connection } from '$lib/state/connection.svelte';
 	import { settings } from '$lib/state/settings.svelte';
+	import { sheetDirty, sheetSync, syncPlanToSheet } from '$lib/state/sheetSync.svelte';
 	import { ui, type Theme } from '$lib/state/ui.svelte';
 
 	let fileInput = $state<HTMLInputElement>();
@@ -63,6 +64,14 @@
 			`${store.plan.name || 'plan'}.plan.json`,
 			new Blob([planToJSON(snapshot())], { type: 'application/json' })
 		);
+	}
+
+	const sheetIsDirty = $derived(sheetDirty());
+
+	async function syncSheet() {
+		menu?.removeAttribute('open');
+		const outcome = await syncPlanToSheet();
+		if (outcome.startsWith('✗')) alert(outcome);
 	}
 
 	async function importJson() {
@@ -273,6 +282,20 @@
 			<button onclick={exportExcel} disabled={exporting}>Export Excel (.xlsx)</button>
 			<button onclick={exportJson}>Export plan file (.json)</button>
 			<button onclick={() => fileInput?.click()}>Import plan file…</button>
+			{#if connection.google}
+				<hr />
+				<button
+					onclick={syncSheet}
+					disabled={sheetSync.busy || !sheetIsDirty}
+					title="Push this period to its Google Sheet (write-only; created on first sync)"
+				>
+					{sheetSync.busy
+						? 'Syncing to Google Sheet…'
+						: sheetIsDirty
+							? 'Sync to Google Sheet'
+							: '✓ Synced to Google Sheet'}
+				</button>
+			{/if}
 			<hr />
 			<button onclick={resetDemo}>Reset to demo data</button>
 		</div>

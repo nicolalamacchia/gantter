@@ -158,6 +158,21 @@ uses the Node adapter (`npm run build && node build`); `npm run dev` works as al
    manually painted PTO is never touched. Holiday fetches work the same way: review the dates,
    apply the ones you want. Colleagues' calendars must be visible to your signed-in account.
 
+### Google Sheets (live mirror)
+
+With the same Google sign-in (the Sheets scope was added — sign out and back in once to
+re-consent, and enable the **Google Sheets API** on the GCP project), the current period can be
+mirrored into a Google Sheet of its own with the familiar Board / Gantt / Tasks tabs:
+
+- **Data → Sync to Google Sheet** (also in **⚙ Settings → Google Sheets**) pushes the plan,
+  creating the spreadsheet on the first sync — the button reads "✓ Synced" and disables while
+  the sheet already matches the plan. If you delete the doc, the next sync recreates it.
+- The **Sync to Google Sheets after every change** checkbox (off by default) pushes
+  automatically a moment after each edit settles (debounced, so a drag burst is one write).
+- Strictly write-only: the board is the source of truth and nothing is ever read back; edits
+  made in the sheet are overwritten on the next sync. Settings keeps an **Open the sheet ↗**
+  link per period.
+
 ## Development
 
 ```sh
@@ -173,5 +188,4 @@ future multi-user sync layer (server or CRDT) can plug in.
 
 ### Possible next steps
 
-- Push directly to Google Sheets (Sheets API `batchUpdate` reusing the existing Google sign-in)
 - Multi-user sync backend behind the command layer

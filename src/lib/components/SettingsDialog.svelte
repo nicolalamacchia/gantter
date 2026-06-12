@@ -20,6 +20,7 @@
 	import { store } from '$lib/state/plan.svelte';
 	import { connection } from '$lib/state/connection.svelte';
 	import { jiraSync, runJiraSync, SYNC_INTERVAL_MIN } from '$lib/state/jiraSync.svelte';
+	import { sheetDirty, sheetSync, sheetUrl, syncPlanToSheet } from '$lib/state/sheetSync.svelte';
 	import { serverConfig } from '$lib/state/serverConfig.svelte';
 	import { settings } from '$lib/state/settings.svelte';
 	import { ui } from '$lib/state/ui.svelte';
@@ -92,6 +93,8 @@
 	}
 	let googleBusy = $state(false);
 	const signedIn = $derived(connection.google);
+	const sheetIsDirty = $derived(sheetDirty());
+	const sheetLink = $derived(sheetUrl());
 
 	function close() {
 		settings.dialogOpen = false;
@@ -684,6 +687,40 @@
 				</div>
 			{/if}
 		</section>
+
+		<section>
+			<h3>Google Sheets</h3>
+			<p class="help">
+				Mirrors the current period into a Google Sheet of its own (Board, Gantt and Tasks tabs),
+				created on the first sync. Write-only — the board stays the source of truth.
+				{#if !signedIn}Sign in with Google above first (re-consent adds the Sheets permission).{/if}
+			</p>
+			<label class="check">
+				<input
+					type="checkbox"
+					checked={settings.google.sheetAutoSync ?? false}
+					onchange={(e) => settings.updateGoogle({ sheetAutoSync: e.currentTarget.checked })}
+				/>
+				Sync to Google Sheets after every change
+			</label>
+			<div class="row">
+				<button
+					onclick={() => syncPlanToSheet()}
+					disabled={sheetSync.busy || !signedIn || !sheetIsDirty}
+					title="Push the current period to its Google Sheet"
+				>
+					{sheetSync.busy ? 'Syncing…' : sheetIsDirty ? 'Sync now' : '✓ In sync'}
+				</button>
+				{#if sheetLink}
+					<a class="sheet-link" href={sheetLink} target="_blank" rel="noreferrer">
+						Open the sheet ↗
+					</a>
+				{/if}
+				<span class="status" class:err={sheetSync.lastOutcome.startsWith('✗')}>
+					{sheetSync.lastOutcome}
+				</span>
+			</div>
+		</section>
 	</div>
 </Modal>
 
@@ -762,6 +799,15 @@
 		border-color: var(--chip-active-bg);
 		color: var(--chip-active-text);
 		font-weight: 600;
+	}
+	.sheet-link {
+		font-size: 12px;
+		color: var(--accent);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.sheet-link:hover {
+		text-decoration: underline;
 	}
 	.check {
 		flex-direction: row;

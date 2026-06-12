@@ -3,6 +3,9 @@
 	import { connection } from '$lib/state/connection.svelte';
 	import { startJiraAutoSync } from '$lib/state/jiraSync.svelte';
 	import { serverConfig } from '$lib/state/serverConfig.svelte';
+	import { settings } from '$lib/state/settings.svelte';
+	import { scheduleSheetAutoSync } from '$lib/state/sheetSync.svelte';
+	import { store } from '$lib/state/plan.svelte';
 	import { ui } from '$lib/state/ui.svelte';
 
 	let { children } = $props();
@@ -23,6 +26,12 @@
 			torn = true;
 			stopSync?.();
 		};
+	});
+
+	$effect(() => {
+		// Every committed change re-arms the debounced Google Sheets push.
+		void store.registryVersion;
+		if (settings.google.sheetAutoSync) scheduleSheetAutoSync();
 	});
 
 	$effect(() => {
