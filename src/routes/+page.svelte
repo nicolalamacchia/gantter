@@ -5,7 +5,6 @@
 	import GanttView from '$lib/components/GanttView.svelte';
 	import Grid from '$lib/components/Grid.svelte';
 	import JiraImportDialog from '$lib/components/JiraImportDialog.svelte';
-	import RollupStrip from '$lib/components/RollupStrip.svelte';
 	import SettingsDialog from '$lib/components/SettingsDialog.svelte';
 	import SplitDialog from '$lib/components/SplitDialog.svelte';
 	import TaskContextMenu from '$lib/components/TaskContextMenu.svelte';
@@ -35,7 +34,6 @@
 	<div class="main">
 		<Backlog />
 		<div class="board">
-			<RollupStrip />
 			{#if ui.viewMode === 'board'}
 				<Grid />
 			{:else}
