@@ -377,6 +377,27 @@ export async function ensureEndDateField(
 	}
 }
 
+/** Low-level field write (board → Jira, one way). */
+export async function pushIssueFields(
+	cfg: JiraSettings,
+	key: string,
+	fields: Record<string, unknown>
+): Promise<void> {
+	await jiraPut(cfg, `api/3/issue/${encodeURIComponent(key.trim())}`, { fields });
+}
+
+/** The fields of a date push: "Target end" (or the platform due date) + optional start. */
+export function issueDateFields(dates: {
+	startDate: string;
+	endDate: string;
+	startDateField?: string | null;
+	endDateField?: string | null;
+}): Record<string, unknown> {
+	const fields: Record<string, unknown> = { [dates.endDateField ?? 'duedate']: dates.endDate };
+	if (dates.startDateField) fields[dates.startDateField] = dates.startDate;
+	return fields;
+}
+
 /** Writes the schedule's dates onto the issue (board → Jira, one way). */
 export async function pushIssueDates(
 	cfg: JiraSettings,
@@ -388,30 +409,26 @@ export async function pushIssueDates(
 		endDateField?: string | null;
 	}
 ): Promise<void> {
-	// "Target end" when the site has it; the platform due date otherwise.
-	const fields: Record<string, unknown> = { [dates.endDateField ?? 'duedate']: dates.endDate };
-	if (dates.startDateField) fields[dates.startDateField] = dates.startDate;
-	await jiraPut(cfg, `api/3/issue/${encodeURIComponent(key.trim())}`, { fields });
+	await pushIssueFields(cfg, key, issueDateFields(dates));
 }
 
 /**
  * Writes the task's estimate back as story points (1 person-day = 1 SP).
  * Candidate fields are tried in order — sites have different writable ones
- * per project type, and writing the wrong one is a 400.
+ * per project type, and writing the wrong one is a 400. Returns the field
+ * that accepted the value, so callers can combine later writes into one PUT.
  */
 export async function pushIssueEstimate(
 	cfg: JiraSettings,
 	key: string,
 	storyPoints: number,
 	fieldIds: string[]
-): Promise<void> {
+): Promise<string> {
 	let lastError: unknown = new Error('No story-points field to write');
 	for (const fieldId of fieldIds) {
 		try {
-			await jiraPut(cfg, `api/3/issue/${encodeURIComponent(key.trim())}`, {
-				fields: { [fieldId]: storyPoints }
-			});
-			return;
+			await pushIssueFields(cfg, key, { [fieldId]: storyPoints });
+			return fieldId;
 		} catch (e) {
 			lastError = e;
 		}

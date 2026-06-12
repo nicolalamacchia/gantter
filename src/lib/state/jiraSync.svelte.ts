@@ -6,8 +6,10 @@ import {
 	ensureStoryPointsFields,
 	fetchChildrenStoryPointSum,
 	fetchIssuesByKeys,
+	issueDateFields,
 	pushIssueDates,
-	pushIssueEstimate
+	pushIssueEstimate,
+	pushIssueFields
 } from '$lib/integrations/jira';
 import { store } from './plan.svelte';
 import { settings } from './settings.svelte';
@@ -114,24 +116,55 @@ export async function runJiraPush(taskIds?: string[]): Promise<string> {
 		let dates = 0;
 		let estimates = 0;
 		const failures: string[] = [];
+		// Dates + estimate go out as ONE PUT with the best story-points candidate;
+		// if that write is rejected (wrong field for this project type), it splits
+		// into dates alone + per-field estimate retries, so a bad points field can
+		// never sink the dates. The field that sticks leads every later write.
+		let provenSpField: string | null = spFields[0] ?? null;
 		for (const task of linked) {
 			const rollup = store.schedule.rollups[task.id];
+			const dateRange =
+				rollup?.startDate && rollup.endDate
+					? {
+							startDate: rollup.startDate,
+							endDate: rollup.endDate,
+							startDateField: startField,
+							endDateField: endField
+						}
+					: null;
+			const storyPoints =
+				spFields.length && task.estimateDays != null ? Math.round(task.estimateDays) : null;
 			try {
-				if (rollup?.startDate && rollup.endDate) {
-					await pushIssueDates(settings.jira, task.jiraKey!, {
-						startDate: rollup.startDate,
-						endDate: rollup.endDate,
-						startDateField: startField,
-						endDateField: endField
-					});
+				let combined = false;
+				if (dateRange && storyPoints != null && provenSpField) {
+					try {
+						await pushIssueFields(settings.jira, task.jiraKey!, {
+							...issueDateFields(dateRange),
+							[provenSpField]: storyPoints
+						});
+						combined = true;
+					} catch {
+						// split below — and re-prove the points field for this issue type
+					}
+				}
+				if (combined) {
+					dates++;
+					estimates++;
+					continue;
+				}
+				if (dateRange) {
+					await pushIssueDates(settings.jira, task.jiraKey!, dateRange);
 					dates++;
 				}
-				if (spFields.length && task.estimateDays != null) {
-					await pushIssueEstimate(
+				if (storyPoints != null) {
+					const ordered = provenSpField
+						? [provenSpField, ...spFields.filter((f) => f !== provenSpField)]
+						: spFields;
+					provenSpField = await pushIssueEstimate(
 						settings.jira,
 						task.jiraKey!,
-						Math.round(task.estimateDays),
-						spFields
+						storyPoints,
+						ordered
 					);
 					estimates++;
 				}
